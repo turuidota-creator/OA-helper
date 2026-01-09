@@ -8,7 +8,7 @@
     projectName: "费用归属项目名称",
     fiscalYear: "费用发生年度",
     budget: ["预算内/外", "预算外/内", "预算内外", "预算外内", "预算类型"],
-    amount: ["金额", "RMB总价合计", "总价合计"], // 多个可能的标签
+    amount: ["RMB总价合计", "总价合计", "金额"], // 多个可能的标签
     orderPurpose: "订单用途说明",
   };
 
@@ -114,9 +114,134 @@
   function normalizeBudgetChoice(text) {
     if (!text) return "";
     const compact = String(text).replace(/\s+/g, "");
-    if (compact.includes("预算内")) return "预算内";
-    if (compact.includes("预算外")) return "预算外";
-    return compact;
+    if (!compact || compact.includes("请选择")) return "";
+    const normalizedBudgetLabels = (Array.isArray(LABELS.budget) ? LABELS.budget : [LABELS.budget])
+      .map(label => String(label).replace(/\s+/g, ""));
+    if (normalizedBudgetLabels.includes(compact)) return "";
+    const hasIn = compact.includes("预算内");
+    const hasOut = compact.includes("预算外");
+    if (hasIn && hasOut) return "";
+    if (hasIn) return "预算内";
+    if (hasOut) return "预算外";
+    return "";
+  }
+
+  function formatAmountForDisplay(rawAmount) {
+    if (!rawAmount) return "";
+    const raw = String(rawAmount).trim();
+    if (!raw) return "";
+
+    const parseNumberWithUnit = (text) => {
+      const numericText = text.replace(/[^\d.-]/g, "");
+      if (!numericText) return null;
+      const numericValue = Number(numericText);
+      if (Number.isNaN(numericValue)) return null;
+      if (text.includes("亿")) return numericValue * 100000000;
+      if (text.includes("万")) return numericValue * 10000;
+      return numericValue;
+    };
+
+    const formatNumber = (value) => {
+      if (!Number.isFinite(value)) return "";
+      const fixed = value % 1 === 0 ? value.toFixed(0) : value.toFixed(2);
+      const [integer, decimal] = fixed.split(".");
+      const withCommas = integer.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+      if (!decimal) return withCommas;
+      const trimmedDecimal = decimal.replace(/0+$/, "");
+      return trimmedDecimal ? `${withCommas}.${trimmedDecimal}` : withCommas;
+    };
+
+    if (/\d/.test(raw)) {
+      const parsedNumber = parseNumberWithUnit(raw);
+      if (parsedNumber !== null) {
+        return formatNumber(parsedNumber);
+      }
+    }
+
+    const digitMap = {
+      零: 0,
+      〇: 0,
+      一: 1,
+      壹: 1,
+      二: 2,
+      贰: 2,
+      两: 2,
+      叁: 3,
+      三: 3,
+      肆: 4,
+      四: 4,
+      伍: 5,
+      五: 5,
+      陆: 6,
+      六: 6,
+      柒: 7,
+      七: 7,
+      捌: 8,
+      八: 8,
+      玖: 9,
+      九: 9,
+    };
+    const unitMap = {
+      十: 10,
+      拾: 10,
+      百: 100,
+      佰: 100,
+      千: 1000,
+      仟: 1000,
+      万: 10000,
+      亿: 100000000,
+    };
+
+    const toNumberFromChinese = (text) => {
+      let total = 0;
+      let section = 0;
+      let number = 0;
+      for (const char of text) {
+        if (digitMap[char] !== undefined) {
+          number = digitMap[char];
+          continue;
+        }
+        const unit = unitMap[char];
+        if (!unit) {
+          if (char === "元" || char === "圆") {
+            section += number;
+            total += section;
+            section = 0;
+            number = 0;
+          }
+          continue;
+        }
+        if (unit === 10000 || unit === 100000000) {
+          section = (section + number) * unit;
+          total += section;
+          section = 0;
+          number = 0;
+        } else {
+          section += (number || 1) * unit;
+          number = 0;
+        }
+      }
+      return total + section + number;
+    };
+
+    const parseChineseCurrency = (text) => {
+      const cleaned = text.replace(/\s+/g, "").replace(/整/g, "");
+      const jiaoMatch = cleaned.match(/([零壹贰两叁肆伍陆柒捌玖一二三四五六七八九])角/);
+      const fenMatch = cleaned.match(/([零壹贰两叁肆伍陆柒捌玖一二三四五六七八九])分/);
+      const decimalValue =
+        (jiaoMatch ? digitMap[jiaoMatch[1]] * 0.1 : 0) +
+        (fenMatch ? digitMap[fenMatch[1]] * 0.01 : 0);
+      const integerPart = cleaned.split(/[角分]/)[0];
+      const integerValue = toNumberFromChinese(integerPart);
+      if (!Number.isFinite(integerValue)) return null;
+      return integerValue + decimalValue;
+    };
+
+    const parsedChinese = parseChineseCurrency(raw);
+    if (parsedChinese !== null) {
+      return formatNumber(parsedChinese);
+    }
+    return raw;
   }
 
   function parseFiscalYearQuarter(text) {
@@ -247,6 +372,24 @@
     return null;
   }
 
+  function findAmountFormItem() {
+    const labels = Array.isArray(LABELS.amount) ? LABELS.amount : [LABELS.amount];
+    for (const label of labels) {
+      const item = findFormItemByLabelText(label);
+      if (item) return item;
+    }
+    for (const label of labels) {
+      const fuzzyItem = findFormItemByLabelTextFuzzy(label);
+      if (fuzzyItem) {
+        const labelText = fuzzyItem.querySelector(".el-form-item__label");
+        const normalized = labelText ? labelText.textContent.trim() : "";
+        if (normalized.includes("大写")) continue;
+        return fuzzyItem;
+      }
+    }
+    return null;
+  }
+
   function hasKeyFieldLabels() {
     const labels = Array.from(document.querySelectorAll(".el-form-item__label"));
     if (!labels.length) return false;
@@ -265,6 +408,7 @@
     const fiscalYear = readInputValueFromFormItem(findFormItemByLabelText(LABELS.fiscalYear));
     const rawBudgetChoice = readInputValueFromFormItem(findFormItemByLabels(LABELS.budget));
     const budgetChoice = normalizeBudgetChoice(rawBudgetChoice);
+    const rawAmount = readInputValueFromFormItem(findAmountFormItem());
     return {
       deptFullPath: readInputValueFromFormItem(findFormItemByLabelText(LABELS.deptFullPath)),
       projectName: readInputValueFromFormItem(findFormItemByLabelText(LABELS.projectName)),
@@ -273,7 +417,7 @@
       budgetChoice,
       budgetChoiceMissing: !budgetChoice,
       budgetChoiceWarn: shouldWarnBudgetChoice(fiscalYear, budgetChoice),
-      amount: readInputValueFromFormItem(findFormItemByLabels(LABELS.amount)),
+      amount: formatAmountForDisplay(rawAmount),
       flowHandlers: readFlowHandlers(),
       attachments: readAttachmentNames(),
       orderPurpose: readInputValueFromFormItem(findFormItemByLabelText(LABELS.orderPurpose)),
