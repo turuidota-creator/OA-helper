@@ -263,11 +263,13 @@
         title: "6. 附件名称",
         value: data.attachments && data.attachments.length ? data.attachments.join("\n") : "",
         missingText: "（无附件）",
+        showCheck: true,
       },
       {
         title: "7. 订单用途说明",
         value: data.orderPurpose,
         missingText: "（空）",
+        showCheck: true,
       },
       {
         title: "5. 流转记录前两个办理人",
@@ -283,10 +285,10 @@
         const valueText = missing ? field.missingText : field.value;
         const missingClass = missing ? "is-missing" : "is-ok";
         const extraClass = field.extraClass ? ` ${field.extraClass}` : "";
-        const status = missing ? "⚠️" : "✅";
+        const status = field.showCheck && !missing ? "✅ " : "";
         return `
           <div class="field ${missingClass}${extraClass}">
-            <div class="field-title">${status} ${field.title}</div>
+            <div class="field-title">${status}${field.title}</div>
             <div class="field-value">${safe(valueText)}</div>
           </div>
         `;
@@ -317,6 +319,7 @@
           padding: 10px 12px;
           background: linear-gradient(135deg, #f5f7ff, #eef2ff);
           cursor: move;
+          user-select: none;
         }
         .title {
           font-size: 14px;
@@ -483,6 +486,25 @@
       }
     });
 
+    const fallbackCopy = (text) => {
+      const textarea = document.createElement("textarea");
+      textarea.value = text;
+      textarea.style.position = "fixed";
+      textarea.style.left = "-9999px";
+      textarea.style.top = "0";
+      document.body.appendChild(textarea);
+      textarea.focus();
+      textarea.select();
+      let success = false;
+      try {
+        success = document.execCommand("copy");
+      } catch {
+        success = false;
+      }
+      textarea.remove();
+      return success;
+    };
+
     copyBtn.addEventListener("click", async () => {
       const text =
         `业务归属部门全路径：${data.deptFullPath || ""}
@@ -498,14 +520,37 @@
         setToast("");
         setTimeout(() => (copyBtn.textContent = "复制"), 1200);
       } catch {
-        setToast("复制失败：浏览器可能禁止剪贴板权限。");
+        const fallbackSuccess = fallbackCopy(text);
+        if (fallbackSuccess) {
+          copyBtn.textContent = "已复制";
+          setToast("");
+          setTimeout(() => (copyBtn.textContent = "复制"), 1200);
+        } else {
+          setToast("复制失败：浏览器可能禁止剪贴板权限。");
+        }
       }
+    };
+
+    dragHandle.addEventListener("mousedown", (event) => {
+      if (event.target.closest("button")) return;
+      state.dragging = true;
+      const rect = root.getBoundingClientRect();
+      state.dragOffsetX = rect.right - event.clientX;
+      state.dragOffsetY = rect.bottom - event.clientY;
+      document.addEventListener("mousemove", onMouseMove);
+      document.addEventListener("mouseup", onMouseUp);
     });
 
     const onMouseMove = (event) => {
       if (!state.dragging) return;
-      const right = Math.max(12, window.innerWidth - event.clientX - state.dragOffsetX);
-      const bottom = Math.max(12, window.innerHeight - event.clientY - state.dragOffsetY);
+      const minRight = 12;
+      const minBottom = 12;
+      const maxRight = Math.max(12, window.innerWidth - root.offsetWidth - 12);
+      const maxBottom = Math.max(12, window.innerHeight - root.offsetHeight - 12);
+      const nextRight = window.innerWidth - event.clientX - state.dragOffsetX;
+      const nextBottom = window.innerHeight - event.clientY - state.dragOffsetY;
+      const right = Math.min(maxRight, Math.max(minRight, nextRight));
+      const bottom = Math.min(maxBottom, Math.max(minBottom, nextBottom));
       root.style.right = `${right}px`;
       root.style.bottom = `${bottom}px`;
     };
@@ -513,6 +558,7 @@
     const onMouseUp = () => {
       if (!state.dragging) return;
       state.dragging = false;
+      document.body.style.userSelect = "";
       document.removeEventListener("mousemove", onMouseMove);
       document.removeEventListener("mouseup", onMouseUp);
       if (state.isPinned) {
@@ -524,10 +570,12 @@
 
     dragHandle.addEventListener("mousedown", (event) => {
       if (event.target.closest("button")) return;
+      event.preventDefault();
       state.dragging = true;
       const rect = root.getBoundingClientRect();
       state.dragOffsetX = rect.right - event.clientX;
       state.dragOffsetY = rect.bottom - event.clientY;
+      document.body.style.userSelect = "none";
       document.addEventListener("mousemove", onMouseMove);
       document.addEventListener("mouseup", onMouseUp);
     });
