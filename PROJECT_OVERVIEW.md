@@ -21,10 +21,11 @@
 
 | 序号 | 字段名 | 表单 Label |
 |------|--------|------------|
+| 0 | 申请人姓名 | 从"申请人基础信息"表格的"姓名"列读取（点击可打开企业微信） |
 | 1 | 业务归属部门全路径 | `业务归属部门全路径` |
 | 2 | 费用归属项目名称 | `费用归属项目名称` |
-| 3 | 费用发生年度 | `费用发生年度` |
-| 4 | 金额 | `金额` |
+| 3 | 金额 | `金额` |
+| 4 | 费用发生年度 | `费用发生年度` |
 | 5 | 流转记录前两个办理人 | 从 `#pane-record` 的 timeline 中读取 |
 | 6 | 附件名称 | 从 `.upload-file-name` 中读取 |
 | 7 | 订单用途说明 | `订单用途说明` |
@@ -62,11 +63,12 @@ d:\oa-pr-helper\
 | `findFormItemByLabelText(labelText)` | 根据 Label 文本查找 `.el-form-item` 容器 |
 | `readInputValueFromFormItem(formItem)` | 从表单项中读取值（支持 input/textarea/cascader/select/static） |
 | `readAttachmentNames()` | 读取所有附件名称 |
+| `readApplicantName()` | 从"申请人基础信息"表格读取申请人姓名 |
 | `parseFiscalYearQuarter(text)` | 解析费用年度（年份 + 季度） |
 | `isFiscalYearOutOfRange(text)` | 判断费用年度是否超出当前季度 ±1 范围 |
 | `readFlowHandlers()` | 从流转记录中读取前两个办理人 |
-| `extractKeyFields()` | 汇总提取所有关键字段 |
-| `renderPopup(data)` | 渲染右下角浮窗 |
+| `extractKeyFields()` | 汇总提取所有关键字段（含申请人姓名） |
+| `renderPopup(data)` | 渲染右下角浮窗（含企业微信链接） |
 | `onUrlMaybeChanged()` | SPA 路由监听，进入/离开 PR 页时触发 |
 | `bootForPRPage()` | 启动 PR 页面监听，持续监听数据变化并自动刷新弹窗 |
 

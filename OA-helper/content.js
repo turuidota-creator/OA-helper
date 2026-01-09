@@ -404,12 +404,37 @@
     return matches.some(match => texts.includes(match));
   }
 
+  // 读取申请人姓名（从"申请人基础信息"表格）
+  function readApplicantName() {
+    // 方法1：从表格中查找"姓名"标签对应的值
+    const tds = Array.from(document.querySelectorAll("td"));
+    for (let i = 0; i < tds.length; i++) {
+      const text = (tds[i].textContent || "").trim();
+      if (text === "姓名" && tds[i + 1]) {
+        const name = (tds[i + 1].textContent || "").trim();
+        if (name && name !== "姓名") return name;
+      }
+    }
+    // 方法2：从 .el-descriptions 结构读取
+    const containers = document.querySelectorAll(".el-descriptions-item__container");
+    for (const container of containers) {
+      const label = container.querySelector(".el-descriptions-item__label");
+      const content = container.querySelector(".el-descriptions-item__content");
+      if (label && (label.textContent || "").trim() === "姓名" && content) {
+        const name = (content.textContent || "").trim();
+        if (name) return name;
+      }
+    }
+    return "";
+  }
+
   function extractKeyFields() {
     const fiscalYear = readInputValueFromFormItem(findFormItemByLabelText(LABELS.fiscalYear));
     const rawBudgetChoice = readInputValueFromFormItem(findFormItemByLabels(LABELS.budget));
     const budgetChoice = normalizeBudgetChoice(rawBudgetChoice);
     const rawAmount = readInputValueFromFormItem(findAmountFormItem());
     return {
+      applicantName: readApplicantName(),
       deptFullPath: readInputValueFromFormItem(findFormItemByLabelText(LABELS.deptFullPath)),
       projectName: readInputValueFromFormItem(findFormItemByLabelText(LABELS.projectName)),
       fiscalYear,
@@ -471,10 +496,15 @@
         extraClass: data.fiscalYearOutOfRange ? "is-warn" : "",
         rightBadge: data.budgetChoiceWarn
           ? {
-              text: data.budgetChoice,
-              warn: true,
-            }
+            text: data.budgetChoice,
+            warn: true,
+          }
           : null,
+      },
+      {
+        title: "5. 流转记录前两个办理人",
+        value: data.flowHandlers && data.flowHandlers.length ? data.flowHandlers.join("→") : "",
+        missingText: "（空）",
       },
       {
         title: "6. 附件名称",
@@ -487,11 +517,6 @@
         value: data.orderPurpose,
         missingText: "（空）",
         showCheck: true,
-      },
-      {
-        title: "5. 流转记录前两个办理人",
-        value: data.flowHandlers && data.flowHandlers.length ? data.flowHandlers.join("→") : "",
-        missingText: "（空）",
       },
     ];
 
@@ -565,6 +590,24 @@
         .title {
           font-size: 14px;
           font-weight: 600;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+        .applicant-link {
+          font-size: 12px;
+          font-weight: 500;
+          color: #4f46e5;
+          text-decoration: none;
+          padding: 2px 8px;
+          background: rgba(79, 70, 229, 0.1);
+          border-radius: 12px;
+          cursor: pointer;
+          transition: all 0.2s ease;
+        }
+        .applicant-link:hover {
+          background: rgba(79, 70, 229, 0.2);
+          color: #3730a3;
         }
         .sub {
           font-size: 12px;
@@ -670,7 +713,7 @@
       <div class="card" id="oa-card">
         <div class="header" id="oa-drag-handle">
           <div class="header-text">
-            <div class="title">PR 关键字段</div>
+            <div class="title">PR 关键字段${data.applicantName ? ` <a href="wxwork://searchcontact?name=${encodeURIComponent(data.applicantName)}" class="applicant-link" title="点击在企业微信中搜索此人">👤 ${data.applicantName}</a>` : ""}</div>
             <div class="sub ${statusClass}">${statusText}</div>
           </div>
           <div class="actions">
