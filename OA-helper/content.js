@@ -1022,7 +1022,7 @@
       // 后续更新：检测数据是否有实质变化
       if (currentDataJson !== lastDataJson) {
         lastDataJson = currentDataJson;
-        // 使用防抖机制避免过于频繁的渲染
+        // 使用防抖机制避免过于频繁的渲染（减少到100ms提高响应速度）
         if (updateDebounceTimer) clearTimeout(updateDebounceTimer);
         updateDebounceTimer = setTimeout(() => {
           // 如果所有数据都为空，则隐藏弹窗（可能是用户离开了 PR 页面）
@@ -1033,14 +1033,23 @@
           }
           console.log("[OA系统小助手] 检测到数据变化，更新弹窗");
           renderPopup(data);
-        }, 200);
+        }, 100);
       }
     };
 
     tryRun();
 
+    // 监听 DOM 变化
     observer = new MutationObserver(() => tryRun());
     observer.observe(document.documentElement, { childList: true, subtree: true });
+
+    // 额外监听表单事件（input/change/click），加速预算选择等下拉框的响应
+    const formEventHandler = () => {
+      setTimeout(tryRun, 50); // 稍微延迟确保值已更新
+    };
+    document.addEventListener("input", formEventHandler, true);
+    document.addEventListener("change", formEventHandler, true);
+    document.addEventListener("click", formEventHandler, true);
 
     // 8秒后如果还没有初始渲染，强制渲染一次
     bootTimer = setTimeout(() => {
