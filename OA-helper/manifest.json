@@ -1,8 +1,9 @@
 {
   "manifest_version": 3,
-  "name": "OA PR Key Fields Popup",
+  "name": "OA系统小助手",
   "version": "0.1.1",
-  "description": "Show key fields on PR pages.",
+  "author": "涂瑞",
+  "description": "在PR审批页面显示关键字段信息。",
   "host_permissions": ["*://oa.cyou-inc.com/*"],
   "content_scripts": [
     {
