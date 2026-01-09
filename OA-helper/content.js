@@ -11,6 +11,7 @@
 
   let observer = null;
   let lastUrl = "";
+  let lastShouldShow = false;
   let bootTimer = null;
 
   function findFormItemByLabelText(labelText) {
@@ -197,6 +198,20 @@
       if (item) return item;
     }
     return null;
+  }
+
+  function hasKeyFieldLabels() {
+    const labels = Array.from(document.querySelectorAll(".el-form-item__label"));
+    if (!labels.length) return false;
+    const texts = labels.map(label => (label.textContent || "").trim());
+    const matches = [
+      LABELS.deptFullPath,
+      LABELS.projectName,
+      LABELS.fiscalYear,
+      LABELS.orderPurpose,
+      ...(Array.isArray(LABELS.amount) ? LABELS.amount : [LABELS.amount]),
+    ];
+    return matches.some(match => texts.includes(match));
   }
 
   function extractKeyFields() {
@@ -631,11 +646,13 @@
   }
 
   function onUrlMaybeChanged() {
-    if (location.href === lastUrl) return;
+    const shouldShow = PR_URL_RE.test(location.pathname) || PR_URL_RE.test(location.href) || hasKeyFieldLabels();
+    if (location.href === lastUrl && shouldShow === lastShouldShow) return;
     lastUrl = location.href;
+    lastShouldShow = shouldShow;
 
     // 进入 PR 页面才弹；离开就关
-    if (PR_URL_RE.test(location.pathname) || PR_URL_RE.test(location.href)) {
+    if (shouldShow) {
       bootForPRPage();
     } else {
       stopObserver();
