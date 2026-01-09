@@ -529,6 +529,16 @@
           setToast("复制失败：浏览器可能禁止剪贴板权限。");
         }
       }
+    };
+
+    dragHandle.addEventListener("mousedown", (event) => {
+      if (event.target.closest("button")) return;
+      state.dragging = true;
+      const rect = root.getBoundingClientRect();
+      state.dragOffsetX = rect.right - event.clientX;
+      state.dragOffsetY = rect.bottom - event.clientY;
+      document.addEventListener("mousemove", onMouseMove);
+      document.addEventListener("mouseup", onMouseUp);
     });
 
     const onMouseMove = (event) => {
