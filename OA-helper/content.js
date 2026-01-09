@@ -530,21 +530,21 @@
           : null,
       },
       {
-        title: "5. 流转记录前两个办理人",
-        value: data.flowHandlers && data.flowHandlers.length ? data.flowHandlers.join("→") : "",
-        missingText: "（空）",
-      },
-      {
-        title: "6. 附件名称",
+        title: "5. 附件名称",
         value: data.attachments && data.attachments.length ? data.attachments.join("\n") : "",
         missingText: "（无附件）",
         showCheck: true,
       },
       {
-        title: "7. 订单用途说明",
+        title: "6. 订单用途说明",
         value: data.orderPurpose,
         missingText: "（空）",
         showCheck: true,
+      },
+      {
+        title: "7. 流转记录前两个办理人",
+        value: data.flowHandlers && data.flowHandlers.length ? data.flowHandlers.join("→") : "",
+        missingText: "（空）",
       },
     ];
 
@@ -741,7 +741,7 @@
       <div class="card" id="oa-card">
         <div class="header" id="oa-drag-handle">
           <div class="header-text">
-            <div class="title">PR 关键字段${data.applicantName ? ` <span class="applicant-link" id="oa-copy-name" title="点击复制姓名，可在企业微信中搜索">👤 ${data.applicantName}</span>` : ""}</div>
+            <div class="title">PR 关键字段${data.applicantName ? ` <span class="applicant-link" id="oa-copy-name" title="点击复制姓名并打开企业微信">${data.applicantName}</span>` : ""}</div>
             <div class="sub ${statusClass}">${statusText}</div>
           </div>
           <div class="actions">
@@ -804,17 +804,16 @@
 
     closeBtn.addEventListener("click", () => root.remove());
 
-    // 复制申请人姓名
+    // 复制申请人姓名并打开企业微信
     const copyNameBtn = shadow.getElementById("oa-copy-name");
     if (copyNameBtn && data.applicantName) {
       copyNameBtn.addEventListener("click", async (e) => {
         e.stopPropagation();
+        const originalText = data.applicantName;
+
+        // 复制姓名到剪贴板
         try {
           await navigator.clipboard.writeText(data.applicantName);
-          copyNameBtn.textContent = "✅ 已复制";
-          setTimeout(() => {
-            copyNameBtn.textContent = `👤 ${data.applicantName}`;
-          }, 1500);
         } catch {
           // 备用复制方法
           const textarea = document.createElement("textarea");
@@ -825,11 +824,16 @@
           textarea.select();
           document.execCommand("copy");
           textarea.remove();
-          copyNameBtn.textContent = "✅ 已复制";
-          setTimeout(() => {
-            copyNameBtn.textContent = `👤 ${data.applicantName}`;
-          }, 1500);
         }
+
+        // 显示已复制提示
+        copyNameBtn.textContent = "✅ 已复制";
+        setTimeout(() => {
+          copyNameBtn.textContent = originalText;
+        }, 1500);
+
+        // 打开企业微信
+        window.location.href = "wxwork://";
       });
     }
 
