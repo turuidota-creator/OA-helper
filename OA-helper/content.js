@@ -406,7 +406,7 @@
 
   // 读取申请人姓名（从"申请人基础信息"表格）
   function readApplicantName() {
-    // 方法1：从表格中查找"姓名"标签对应的值
+    // 方法1：从表格中查找"姓名"标签对应的值（相邻 td）
     const tds = Array.from(document.querySelectorAll("td"));
     for (let i = 0; i < tds.length; i++) {
       const text = (tds[i].textContent || "").trim();
@@ -415,7 +415,19 @@
         if (name && name !== "姓名") return name;
       }
     }
-    // 方法2：从 .el-descriptions 结构读取
+    // 方法2：从 tr 结构中读取（某些表格 label 和 value 在同一行不同列）
+    const rows = document.querySelectorAll("table tr");
+    for (const row of rows) {
+      const cells = row.querySelectorAll("td, th");
+      for (let i = 0; i < cells.length - 1; i++) {
+        const labelText = (cells[i].textContent || "").trim();
+        if (labelText === "姓名") {
+          const name = (cells[i + 1].textContent || "").trim();
+          if (name && name !== "姓名") return name;
+        }
+      }
+    }
+    // 方法3：从 .el-descriptions 结构读取
     const containers = document.querySelectorAll(".el-descriptions-item__container");
     for (const container of containers) {
       const label = container.querySelector(".el-descriptions-item__label");
@@ -423,6 +435,22 @@
       if (label && (label.textContent || "").trim() === "姓名" && content) {
         const name = (content.textContent || "").trim();
         if (name) return name;
+      }
+    }
+    // 方法4：查找包含"姓名"的元素的下一个兄弟元素
+    const allElements = document.querySelectorAll("*");
+    for (const el of allElements) {
+      if (el.children.length === 0 && (el.textContent || "").trim() === "姓名") {
+        // 查找父元素的下一个子元素
+        const parent = el.parentElement;
+        if (parent) {
+          const siblings = Array.from(parent.children);
+          const idx = siblings.indexOf(el);
+          if (idx >= 0 && siblings[idx + 1]) {
+            const name = (siblings[idx + 1].textContent || "").trim();
+            if (name && name !== "姓名" && name.length < 20) return name;
+          }
+        }
       }
     }
     return "";
@@ -975,7 +1003,10 @@
   }
 
   function onUrlMaybeChanged() {
-    const shouldShow = PR_URL_RE.test(location.pathname) || PR_URL_RE.test(location.href) || hasKeyFieldLabels();
+    // 只在 PR 详情页显示弹窗（URL 匹配 /workflow/process/detail/）
+    const urlMatches = PR_URL_RE.test(location.pathname) || PR_URL_RE.test(location.href);
+    // 只有 URL 匹配时才显示，不单独依赖 hasKeyFieldLabels
+    const shouldShow = urlMatches && hasKeyFieldLabels();
     if (location.href === lastUrl && shouldShow === lastShouldShow) return;
     lastUrl = location.href;
     lastShouldShow = shouldShow;
