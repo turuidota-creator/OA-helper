@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "OA PR Key Fields Popup",
+  "version": "0.1.1",
+  "description": "Show key fields on PR pages.",
+  "host_permissions": ["*://oa.cyou-inc.com/*"],
+  "content_scripts": [
+    {
+      "matches": ["*://oa.cyou-inc.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle",
+      "all_frames": true
+    }
+  ]
+}
