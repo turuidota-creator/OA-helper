@@ -867,15 +867,51 @@
     stopObserver();
     removePopup();
 
-    let done = false;
+    let initialRenderDone = false;
+    let lastDataJson = "";
+    let updateDebounceTimer = null;
+
+    // 用于比较数据是否发生变化
+    const getDataSignature = (data) => {
+      return JSON.stringify({
+        budgetChoice: data.budgetChoice || "",
+        budgetChoiceMissing: data.budgetChoiceMissing,
+        fiscalYear: data.fiscalYear || "",
+        fiscalYearOutOfRange: data.fiscalYearOutOfRange,
+        budgetChoiceWarn: data.budgetChoiceWarn,
+        deptFullPath: data.deptFullPath || "",
+        projectName: data.projectName || "",
+        amount: data.amount || "",
+        orderPurpose: data.orderPurpose || "",
+        attachmentsCount: (data.attachments || []).length,
+        flowHandlersCount: (data.flowHandlers || []).length,
+      });
+    };
 
     const tryRun = () => {
-      if (done) return;
       const data = extractKeyFields();
-      if (isDataReady(data)) {
-        done = true;
-        renderPopup(data);
-        stopObserver();
+      const currentDataJson = getDataSignature(data);
+
+      // 首次渲染：只要有任何数据就渲染
+      if (!initialRenderDone) {
+        if (isDataReady(data)) {
+          initialRenderDone = true;
+          lastDataJson = currentDataJson;
+          renderPopup(data);
+          // 注意：这里不再停止 observer，继续监听后续变化
+        }
+        return;
+      }
+
+      // 后续更新：检测数据是否有实质变化
+      if (currentDataJson !== lastDataJson) {
+        lastDataJson = currentDataJson;
+        // 使用防抖机制避免过于频繁的渲染
+        if (updateDebounceTimer) clearTimeout(updateDebounceTimer);
+        updateDebounceTimer = setTimeout(() => {
+          console.log("[OA系统小助手] 检测到数据变化，更新弹窗");
+          renderPopup(data);
+        }, 200);
       }
     };
 
@@ -884,11 +920,13 @@
     observer = new MutationObserver(() => tryRun());
     observer.observe(document.documentElement, { childList: true, subtree: true });
 
+    // 8秒后如果还没有初始渲染，强制渲染一次
     bootTimer = setTimeout(() => {
-      if (!done) {
-        done = true;
-        stopObserver();
-        renderPopup(extractKeyFields());
+      if (!initialRenderDone) {
+        initialRenderDone = true;
+        const data = extractKeyFields();
+        lastDataJson = getDataSignature(data);
+        renderPopup(data);
       }
     }, 8000);
   }

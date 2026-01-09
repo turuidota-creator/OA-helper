@@ -9,6 +9,7 @@
 **一句话**：这是一个 Chrome 浏览器扩展，用于在畅游 OA 系统的 PR（采购申请）页面上自动提取并显示关键字段信息，方便审批人员快速查看。
 
 **核心功能**：
+
 1. 自动检测用户是否进入 PR 详情页（URL 匹配 `/workflow/process/detail/`）
 2. 从表单中提取 7 个关键字段并在右下角浮窗显示
 3. 支持一键复制所有字段到剪贴板
@@ -67,6 +68,15 @@ d:\oa-pr-helper\
 | `extractKeyFields()` | 汇总提取所有关键字段 |
 | `renderPopup(data)` | 渲染右下角浮窗 |
 | `onUrlMaybeChanged()` | SPA 路由监听，进入/离开 PR 页时触发 |
+| `bootForPRPage()` | 启动 PR 页面监听，持续监听数据变化并自动刷新弹窗 |
+
+### 实时数据监听机制
+
+- `bootForPRPage()` 使用 MutationObserver 监听 DOM 变化
+- 首次渲染后**不停止**观察器，继续监听用户交互
+- 通过 `getDataSignature()` 比较数据变化，避免无意义的刷新
+- 使用 200ms 防抖机制避免过于频繁的渲染
+- 当用户选择"预算内/外"等字段时，弹窗会自动更新
 
 ### 路由监听策略
 
