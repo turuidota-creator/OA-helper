@@ -741,7 +741,7 @@
       <div class="card" id="oa-card">
         <div class="header" id="oa-drag-handle">
           <div class="header-text">
-            <div class="title">PR 关键字段${data.applicantName ? ` <a href="wxwork://searchcontact?name=${encodeURIComponent(data.applicantName)}" class="applicant-link" title="点击在企业微信中搜索此人">👤 ${data.applicantName}</a>` : ""}</div>
+            <div class="title">PR 关键字段${data.applicantName ? ` <span class="applicant-link" id="oa-copy-name" title="点击复制姓名，可在企业微信中搜索">👤 ${data.applicantName}</span>` : ""}</div>
             <div class="sub ${statusClass}">${statusText}</div>
           </div>
           <div class="actions">
@@ -803,6 +803,36 @@
     };
 
     closeBtn.addEventListener("click", () => root.remove());
+
+    // 复制申请人姓名
+    const copyNameBtn = shadow.getElementById("oa-copy-name");
+    if (copyNameBtn && data.applicantName) {
+      copyNameBtn.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        try {
+          await navigator.clipboard.writeText(data.applicantName);
+          copyNameBtn.textContent = "✅ 已复制";
+          setTimeout(() => {
+            copyNameBtn.textContent = `👤 ${data.applicantName}`;
+          }, 1500);
+        } catch {
+          // 备用复制方法
+          const textarea = document.createElement("textarea");
+          textarea.value = data.applicantName;
+          textarea.style.position = "fixed";
+          textarea.style.left = "-9999px";
+          document.body.appendChild(textarea);
+          textarea.select();
+          document.execCommand("copy");
+          textarea.remove();
+          copyNameBtn.textContent = "✅ 已复制";
+          setTimeout(() => {
+            copyNameBtn.textContent = `👤 ${data.applicantName}`;
+          }, 1500);
+        }
+      });
+    }
+
     toggleBtn.addEventListener("click", () => {
       state.isCollapsed = !state.isCollapsed;
       card.classList.toggle("is-collapsed", state.isCollapsed);
@@ -927,6 +957,17 @@
     );
   }
 
+  // 检查是否所有关键字段都为空（用于自动隐藏弹窗）
+  function isAllDataEmpty(d) {
+    return !d.deptFullPath?.trim() &&
+      !d.projectName?.trim() &&
+      !d.fiscalYear?.trim() &&
+      !d.amount?.trim() &&
+      !d.orderPurpose?.trim() &&
+      (!d.flowHandlers || d.flowHandlers.length === 0 || (d.flowHandlers.length === 1 && d.flowHandlers[0] === "你")) &&
+      (!d.attachments || d.attachments.length === 0);
+  }
+
   function stopObserver() {
     if (observer) observer.disconnect();
     observer = null;
@@ -980,6 +1021,12 @@
         // 使用防抖机制避免过于频繁的渲染
         if (updateDebounceTimer) clearTimeout(updateDebounceTimer);
         updateDebounceTimer = setTimeout(() => {
+          // 如果所有数据都为空，则隐藏弹窗（可能是用户离开了 PR 页面）
+          if (isAllDataEmpty(data)) {
+            console.log("[OA系统小助手] 检测到数据为空，隐藏弹窗");
+            removePopup();
+            return;
+          }
           console.log("[OA系统小助手] 检测到数据变化，更新弹窗");
           renderPopup(data);
         }, 200);
