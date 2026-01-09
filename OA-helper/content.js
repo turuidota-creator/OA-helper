@@ -1,4 +1,6 @@
 (() => {
+  console.log("[OA系统小助手] 脚本已加载，当前URL:", location.href);
+
   const PR_URL_RE = /\/workflow\/process\/detail\//; // 你也可以加付款单的路径
 
   const LABELS = {
@@ -544,7 +546,7 @@
           setToast("复制失败：浏览器可能禁止剪贴板权限。");
         }
       }
-    };
+    });
 
     dragHandle.addEventListener("mousedown", (event) => {
       if (event.target.closest("button")) return;
