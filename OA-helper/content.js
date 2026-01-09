@@ -7,6 +7,7 @@
     deptFullPath: "业务归属部门全路径",
     projectName: "费用归属项目名称",
     fiscalYear: "费用发生年度",
+    budget: ["预算内/外", "预算内外", "预算外内", "预算类型"],
     amount: ["金额", "RMB总价合计", "总价合计"], // 多个可能的标签
     orderPurpose: "订单用途说明",
   };
@@ -95,6 +96,14 @@
     return Array.from(new Set(names));
   }
 
+  function normalizeBudgetChoice(text) {
+    if (!text) return "";
+    const compact = String(text).replace(/\s+/g, "");
+    if (compact.includes("预算内")) return "预算内";
+    if (compact.includes("预算外")) return "预算外";
+    return compact;
+  }
+
   function parseFiscalYearQuarter(text) {
     if (!text) return null;
     const matchYear = text.match(/(20\d{2})/);
@@ -111,6 +120,25 @@
     const currentIndex = now.getFullYear() * 4 + currentQuarter;
     const fiscalIndex = parsed.year * 4 + parsed.quarter;
     return Math.abs(fiscalIndex - currentIndex) > 1;
+  }
+
+  function shouldWarnBudgetChoice(fiscalYearText, budgetChoice) {
+    if (!fiscalYearText || !budgetChoice) return false;
+    const parsed = parseFiscalYearQuarter(fiscalYearText);
+    if (!parsed) return false;
+    const now = new Date();
+    const currentQuarter = Math.floor(now.getMonth() / 3) + 1;
+    if (parsed.year !== now.getFullYear() || parsed.quarter !== currentQuarter) {
+      return false;
+    }
+    const monthInQuarter = (now.getMonth() % 3) + 1;
+    if (monthInQuarter <= 2 && budgetChoice === "预算内") {
+      return true;
+    }
+    if (monthInQuarter === 3 && budgetChoice === "预算外") {
+      return true;
+    }
+    return false;
   }
 
   function readFlowHandlers() {
@@ -218,11 +246,16 @@
 
   function extractKeyFields() {
     const fiscalYear = readInputValueFromFormItem(findFormItemByLabelText(LABELS.fiscalYear));
+    const rawBudgetChoice = readInputValueFromFormItem(findFormItemByLabels(LABELS.budget));
+    const budgetChoice = normalizeBudgetChoice(rawBudgetChoice);
     return {
       deptFullPath: readInputValueFromFormItem(findFormItemByLabelText(LABELS.deptFullPath)),
       projectName: readInputValueFromFormItem(findFormItemByLabelText(LABELS.projectName)),
       fiscalYear,
       fiscalYearOutOfRange: isFiscalYearOutOfRange(fiscalYear),
+      budgetChoice,
+      budgetChoiceMissing: !budgetChoice,
+      budgetChoiceWarn: shouldWarnBudgetChoice(fiscalYear, budgetChoice),
       amount: readInputValueFromFormItem(findFormItemByLabels(LABELS.amount)),
       flowHandlers: readFlowHandlers(),
       attachments: readAttachmentNames(),
@@ -275,6 +308,12 @@
         value: data.fiscalYear,
         missingText: "（空）",
         extraClass: data.fiscalYearOutOfRange ? "is-warn" : "",
+        rightBadge: data.budgetChoiceWarn
+          ? {
+              text: data.budgetChoice,
+              warn: true,
+            }
+          : null,
       },
       {
         title: "6. 附件名称",
@@ -296,6 +335,24 @@
     ];
 
     const missingCount = fields.reduce((count, field) => (isMissing(field.value) ? count + 1 : count), 0);
+    const hasBudgetSelection = !data.budgetChoiceMissing;
+    const hasBudgetWarning = data.budgetChoiceWarn;
+    let statusText = "";
+    let statusClass = "";
+    if (!hasBudgetSelection) {
+      statusText = "⚠️ 请选择预算内或者外";
+      statusClass = "is-warn";
+    } else if (hasBudgetWarning) {
+      statusText = "⚠️ 请注意是否是预算内";
+      statusClass = "is-warn";
+    } else if (missingCount) {
+      statusText = `⚠️ 缺失 ${missingCount} 项`;
+      statusClass = "is-warn";
+    } else {
+      statusText = "✅ 信息完整";
+      statusClass = "is-ok";
+    }
+
     const fieldHtml = fields
       .map((field) => {
         const missing = isMissing(field.value);
@@ -303,9 +360,15 @@
         const missingClass = missing ? "is-missing" : "is-ok";
         const extraClass = field.extraClass ? ` ${field.extraClass}` : "";
         const status = field.showCheck && !missing ? "✅ " : "";
+        const rightBadge = field.rightBadge
+          ? `<span class="field-badge ${field.rightBadge.warn ? "is-warn" : ""}">⚠️ ${field.rightBadge.text}</span>`
+          : "";
         return `
           <div class="field ${missingClass}${extraClass}">
-            <div class="field-title">${status}${field.title}</div>
+            <div class="field-title-row">
+              <div class="field-title">${status}${field.title}</div>
+              ${rightBadge}
+            </div>
             <div class="field-value">${safe(valueText)}</div>
           </div>
         `;
@@ -346,6 +409,9 @@
           font-size: 12px;
           color: #5b6b7a;
           margin-top: 2px;
+        }
+        .sub.is-warn {
+          color: #b26a00;
         }
         .header-text {
           display: flex;
@@ -406,6 +472,25 @@
           color: #52606d;
           margin-bottom: 4px;
         }
+        .field-title-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+        }
+        .field-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          font-size: 12px;
+          padding: 2px 6px;
+          border-radius: 999px;
+          border: 1px solid transparent;
+          color: #b26a00;
+          background: #fff7e6;
+          border-color: #f5d48e;
+          white-space: nowrap;
+        }
         .field-value {
           font-size: 13px;
           color: #1f2329;
@@ -425,7 +510,7 @@
         <div class="header" id="oa-drag-handle">
           <div class="header-text">
             <div class="title">PR 关键字段</div>
-            <div class="sub">${missingCount ? `⚠️ 缺失 ${missingCount} 项` : "✅ 信息完整"}</div>
+            <div class="sub ${statusClass}">${statusText}</div>
           </div>
           <div class="actions">
             <button id="oa-pr-pin" title="固定位置">固定</button>
