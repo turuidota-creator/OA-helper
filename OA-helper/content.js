@@ -7,7 +7,8 @@
     deptFullPath: "业务归属部门全路径",
     projectName: "费用归属项目名称",
     fiscalYear: "费用发生年度",
-    amount: ["金额", "RMB总价合计", "总价合计"], // 多个可能的标签
+    budget: ["预算内/外", "预算外/内", "预算内外", "预算外内", "预算类型"],
+    amount: ["RMB总价合计", "总价合计", "金额"], // 多个可能的标签
     orderPurpose: "订单用途说明",
   };
 
@@ -22,11 +23,26 @@
     return label ? label.closest(".el-form-item") : null;
   }
 
+  function findFormItemByLabelTextFuzzy(labelText) {
+    const labels = Array.from(document.querySelectorAll(".el-form-item__label"));
+    const target = (labelText || "").trim();
+    if (!target) return null;
+    const label = labels.find(l => {
+      const text = (l.textContent || "").trim();
+      return text.includes(target) || target.includes(text);
+    });
+    return label ? label.closest(".el-form-item") : null;
+  }
+
   function readInputValueFromFormItem(formItem) {
     if (!formItem) return "";
     // 优先读取 input 的 value
     const input = formItem.querySelector("input.el-input__inner");
     if (input && typeof input.value === "string" && input.value.trim()) return input.value.trim();
+    const selectInput = formItem.querySelector(".el-select input.el-input__inner");
+    if (selectInput && typeof selectInput.value === "string" && selectInput.value.trim()) {
+      return selectInput.value.trim();
+    }
     // textarea
     const textarea = formItem.querySelector("textarea.el-textarea__inner");
     if (textarea && typeof textarea.value === "string" && textarea.value.trim()) return textarea.value.trim();
@@ -95,6 +111,139 @@
     return Array.from(new Set(names));
   }
 
+  function normalizeBudgetChoice(text) {
+    if (!text) return "";
+    const compact = String(text).replace(/\s+/g, "");
+    if (!compact || compact.includes("请选择")) return "";
+    const normalizedBudgetLabels = (Array.isArray(LABELS.budget) ? LABELS.budget : [LABELS.budget])
+      .map(label => String(label).replace(/\s+/g, ""));
+    if (normalizedBudgetLabels.includes(compact)) return "";
+    const hasIn = compact.includes("预算内");
+    const hasOut = compact.includes("预算外");
+    if (hasIn && hasOut) return "";
+    if (hasIn) return "预算内";
+    if (hasOut) return "预算外";
+    return "";
+  }
+
+  function formatAmountForDisplay(rawAmount) {
+    if (!rawAmount) return "";
+    const raw = String(rawAmount).trim();
+    if (!raw) return "";
+
+    const parseNumberWithUnit = (text) => {
+      const numericText = text.replace(/[^\d.-]/g, "");
+      if (!numericText) return null;
+      const numericValue = Number(numericText);
+      if (Number.isNaN(numericValue)) return null;
+      if (text.includes("亿")) return numericValue * 100000000;
+      if (text.includes("万")) return numericValue * 10000;
+      return numericValue;
+    };
+
+    const formatNumber = (value) => {
+      if (!Number.isFinite(value)) return "";
+      const fixed = value % 1 === 0 ? value.toFixed(0) : value.toFixed(2);
+      const [integer, decimal] = fixed.split(".");
+      const withCommas = integer.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+      if (!decimal) return withCommas;
+      const trimmedDecimal = decimal.replace(/0+$/, "");
+      return trimmedDecimal ? `${withCommas}.${trimmedDecimal}` : withCommas;
+    };
+
+    if (/\d/.test(raw)) {
+      const parsedNumber = parseNumberWithUnit(raw);
+      if (parsedNumber !== null) {
+        return formatNumber(parsedNumber);
+      }
+    }
+
+    const digitMap = {
+      零: 0,
+      〇: 0,
+      一: 1,
+      壹: 1,
+      二: 2,
+      贰: 2,
+      两: 2,
+      叁: 3,
+      三: 3,
+      肆: 4,
+      四: 4,
+      伍: 5,
+      五: 5,
+      陆: 6,
+      六: 6,
+      柒: 7,
+      七: 7,
+      捌: 8,
+      八: 8,
+      玖: 9,
+      九: 9,
+    };
+    const unitMap = {
+      十: 10,
+      拾: 10,
+      百: 100,
+      佰: 100,
+      千: 1000,
+      仟: 1000,
+      万: 10000,
+      亿: 100000000,
+    };
+
+    const toNumberFromChinese = (text) => {
+      let total = 0;
+      let section = 0;
+      let number = 0;
+      for (const char of text) {
+        if (digitMap[char] !== undefined) {
+          number = digitMap[char];
+          continue;
+        }
+        const unit = unitMap[char];
+        if (!unit) {
+          if (char === "元" || char === "圆") {
+            section += number;
+            total += section;
+            section = 0;
+            number = 0;
+          }
+          continue;
+        }
+        if (unit === 10000 || unit === 100000000) {
+          section = (section + number) * unit;
+          total += section;
+          section = 0;
+          number = 0;
+        } else {
+          section += (number || 1) * unit;
+          number = 0;
+        }
+      }
+      return total + section + number;
+    };
+
+    const parseChineseCurrency = (text) => {
+      const cleaned = text.replace(/\s+/g, "").replace(/整/g, "");
+      const jiaoMatch = cleaned.match(/([零壹贰两叁肆伍陆柒捌玖一二三四五六七八九])角/);
+      const fenMatch = cleaned.match(/([零壹贰两叁肆伍陆柒捌玖一二三四五六七八九])分/);
+      const decimalValue =
+        (jiaoMatch ? digitMap[jiaoMatch[1]] * 0.1 : 0) +
+        (fenMatch ? digitMap[fenMatch[1]] * 0.01 : 0);
+      const integerPart = cleaned.split(/[角分]/)[0];
+      const integerValue = toNumberFromChinese(integerPart);
+      if (!Number.isFinite(integerValue)) return null;
+      return integerValue + decimalValue;
+    };
+
+    const parsedChinese = parseChineseCurrency(raw);
+    if (parsedChinese !== null) {
+      return formatNumber(parsedChinese);
+    }
+    return raw;
+  }
+
   function parseFiscalYearQuarter(text) {
     if (!text) return null;
     const matchYear = text.match(/(20\d{2})/);
@@ -111,6 +260,25 @@
     const currentIndex = now.getFullYear() * 4 + currentQuarter;
     const fiscalIndex = parsed.year * 4 + parsed.quarter;
     return Math.abs(fiscalIndex - currentIndex) > 1;
+  }
+
+  function shouldWarnBudgetChoice(fiscalYearText, budgetChoice) {
+    if (!fiscalYearText || !budgetChoice) return false;
+    const parsed = parseFiscalYearQuarter(fiscalYearText);
+    if (!parsed) return false;
+    const now = new Date();
+    const currentQuarter = Math.floor(now.getMonth() / 3) + 1;
+    if (parsed.year !== now.getFullYear() || parsed.quarter !== currentQuarter) {
+      return false;
+    }
+    const monthInQuarter = (now.getMonth() % 3) + 1;
+    if (monthInQuarter <= 2 && budgetChoice === "预算内") {
+      return true;
+    }
+    if (monthInQuarter === 3 && budgetChoice === "预算外") {
+      return true;
+    }
+    return false;
   }
 
   function readFlowHandlers() {
@@ -198,6 +366,26 @@
     for (const label of labels) {
       const item = findFormItemByLabelText(label);
       if (item) return item;
+      const fuzzyItem = findFormItemByLabelTextFuzzy(label);
+      if (fuzzyItem) return fuzzyItem;
+    }
+    return null;
+  }
+
+  function findAmountFormItem() {
+    const labels = Array.isArray(LABELS.amount) ? LABELS.amount : [LABELS.amount];
+    for (const label of labels) {
+      const item = findFormItemByLabelText(label);
+      if (item) return item;
+    }
+    for (const label of labels) {
+      const fuzzyItem = findFormItemByLabelTextFuzzy(label);
+      if (fuzzyItem) {
+        const labelText = fuzzyItem.querySelector(".el-form-item__label");
+        const normalized = labelText ? labelText.textContent.trim() : "";
+        if (normalized.includes("大写")) continue;
+        return fuzzyItem;
+      }
     }
     return null;
   }
@@ -218,12 +406,18 @@
 
   function extractKeyFields() {
     const fiscalYear = readInputValueFromFormItem(findFormItemByLabelText(LABELS.fiscalYear));
+    const rawBudgetChoice = readInputValueFromFormItem(findFormItemByLabels(LABELS.budget));
+    const budgetChoice = normalizeBudgetChoice(rawBudgetChoice);
+    const rawAmount = readInputValueFromFormItem(findAmountFormItem());
     return {
       deptFullPath: readInputValueFromFormItem(findFormItemByLabelText(LABELS.deptFullPath)),
       projectName: readInputValueFromFormItem(findFormItemByLabelText(LABELS.projectName)),
       fiscalYear,
       fiscalYearOutOfRange: isFiscalYearOutOfRange(fiscalYear),
-      amount: readInputValueFromFormItem(findFormItemByLabels(LABELS.amount)),
+      budgetChoice,
+      budgetChoiceMissing: !budgetChoice,
+      budgetChoiceWarn: shouldWarnBudgetChoice(fiscalYear, budgetChoice),
+      amount: formatAmountForDisplay(rawAmount),
       flowHandlers: readFlowHandlers(),
       attachments: readAttachmentNames(),
       orderPurpose: readInputValueFromFormItem(findFormItemByLabelText(LABELS.orderPurpose)),
@@ -275,6 +469,12 @@
         value: data.fiscalYear,
         missingText: "（空）",
         extraClass: data.fiscalYearOutOfRange ? "is-warn" : "",
+        rightBadge: data.budgetChoiceWarn
+          ? {
+              text: data.budgetChoice,
+              warn: true,
+            }
+          : null,
       },
       {
         title: "6. 附件名称",
@@ -296,6 +496,24 @@
     ];
 
     const missingCount = fields.reduce((count, field) => (isMissing(field.value) ? count + 1 : count), 0);
+    const hasBudgetSelection = !data.budgetChoiceMissing;
+    const hasBudgetWarning = data.budgetChoiceWarn;
+    let statusText = "";
+    let statusClass = "";
+    if (!hasBudgetSelection) {
+      statusText = "⚠️ 请选择预算内或者外";
+      statusClass = "is-warn";
+    } else if (hasBudgetWarning) {
+      statusText = "⚠️ 请注意是否是预算内";
+      statusClass = "is-warn";
+    } else if (missingCount) {
+      statusText = `⚠️ 缺失 ${missingCount} 项`;
+      statusClass = "is-warn";
+    } else {
+      statusText = "✅ 信息完整";
+      statusClass = "is-ok";
+    }
+
     const fieldHtml = fields
       .map((field) => {
         const missing = isMissing(field.value);
@@ -303,9 +521,15 @@
         const missingClass = missing ? "is-missing" : "is-ok";
         const extraClass = field.extraClass ? ` ${field.extraClass}` : "";
         const status = field.showCheck && !missing ? "✅ " : "";
+        const rightBadge = field.rightBadge
+          ? `<span class="field-badge ${field.rightBadge.warn ? "is-warn" : ""}">⚠️ ${field.rightBadge.text}</span>`
+          : "";
         return `
           <div class="field ${missingClass}${extraClass}">
-            <div class="field-title">${status}${field.title}</div>
+            <div class="field-title-row">
+              <div class="field-title">${status}${field.title}</div>
+              ${rightBadge}
+            </div>
             <div class="field-value">${safe(valueText)}</div>
           </div>
         `;
@@ -346,6 +570,9 @@
           font-size: 12px;
           color: #5b6b7a;
           margin-top: 2px;
+        }
+        .sub.is-warn {
+          color: #b26a00;
         }
         .header-text {
           display: flex;
@@ -406,6 +633,25 @@
           color: #52606d;
           margin-bottom: 4px;
         }
+        .field-title-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+        }
+        .field-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          font-size: 12px;
+          padding: 2px 6px;
+          border-radius: 999px;
+          border: 1px solid transparent;
+          color: #b26a00;
+          background: #fff7e6;
+          border-color: #f5d48e;
+          white-space: nowrap;
+        }
         .field-value {
           font-size: 13px;
           color: #1f2329;
@@ -425,7 +671,7 @@
         <div class="header" id="oa-drag-handle">
           <div class="header-text">
             <div class="title">PR 关键字段</div>
-            <div class="sub">${missingCount ? `⚠️ 缺失 ${missingCount} 项` : "✅ 信息完整"}</div>
+            <div class="sub ${statusClass}">${statusText}</div>
           </div>
           <div class="actions">
             <button id="oa-pr-pin" title="固定位置">固定</button>
