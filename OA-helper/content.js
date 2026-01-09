@@ -7,7 +7,7 @@
     deptFullPath: "业务归属部门全路径",
     projectName: "费用归属项目名称",
     fiscalYear: "费用发生年度",
-    budget: ["预算内/外", "预算内外", "预算外内", "预算类型"],
+    budget: ["预算内/外", "预算外/内", "预算内外", "预算外内", "预算类型"],
     amount: ["金额", "RMB总价合计", "总价合计"], // 多个可能的标签
     orderPurpose: "订单用途说明",
   };
@@ -23,11 +23,26 @@
     return label ? label.closest(".el-form-item") : null;
   }
 
+  function findFormItemByLabelTextFuzzy(labelText) {
+    const labels = Array.from(document.querySelectorAll(".el-form-item__label"));
+    const target = (labelText || "").trim();
+    if (!target) return null;
+    const label = labels.find(l => {
+      const text = (l.textContent || "").trim();
+      return text.includes(target) || target.includes(text);
+    });
+    return label ? label.closest(".el-form-item") : null;
+  }
+
   function readInputValueFromFormItem(formItem) {
     if (!formItem) return "";
     // 优先读取 input 的 value
     const input = formItem.querySelector("input.el-input__inner");
     if (input && typeof input.value === "string" && input.value.trim()) return input.value.trim();
+    const selectInput = formItem.querySelector(".el-select input.el-input__inner");
+    if (selectInput && typeof selectInput.value === "string" && selectInput.value.trim()) {
+      return selectInput.value.trim();
+    }
     // textarea
     const textarea = formItem.querySelector("textarea.el-textarea__inner");
     if (textarea && typeof textarea.value === "string" && textarea.value.trim()) return textarea.value.trim();
@@ -226,6 +241,8 @@
     for (const label of labels) {
       const item = findFormItemByLabelText(label);
       if (item) return item;
+      const fuzzyItem = findFormItemByLabelTextFuzzy(label);
+      if (fuzzyItem) return fuzzyItem;
     }
     return null;
   }
