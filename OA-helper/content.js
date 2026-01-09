@@ -1,7 +1,12 @@
 (() => {
   console.log("[OA系统小助手] 脚本已加载，当前URL:", location.href);
 
-  const PR_URL_RE = /\/workflow\/process\/detail\//; // 你也可以加付款单的路径
+  const PR_URL_RE = /\/workflow\/process\/detail\//; // 工作流详情页 URL 匹配
+
+  // 流程编码正则表达式（用于区分不同类型的工作流）
+  // GNPR-XXXXXXXXXX: 国内PR采购单
+  // 以后可以添加其他类型，如 GNTNK-XXXXXXXXXX: 付款单
+  const GNPR_CODE_RE = /GNPR-\d{12}/;  // 国内PR采购单编号格式
 
   const LABELS = {
     deptFullPath: "业务归属部门全路径",
@@ -1062,17 +1067,27 @@
     }, 8000);
   }
 
+  // 检测当前 URL 是否包含 GNPR 流程编码
+  function isGNPRProcess() {
+    return GNPR_CODE_RE.test(location.href);
+  }
+
   function onUrlMaybeChanged() {
-    // 只在 PR 详情页显示弹窗（URL 匹配 /workflow/process/detail/）
+    // 只在 PR 详情页显示弹窗
+    // 条件1：URL 匹配 /workflow/process/detail/
+    // 条件2：URL 包含 GNPR-XXXXXXXXXXXX 流程编码
+    // 条件3：页面包含关键字段标签
     const urlMatches = PR_URL_RE.test(location.pathname) || PR_URL_RE.test(location.href);
-    // 只有 URL 匹配时才显示，不单独依赖 hasKeyFieldLabels
-    const shouldShow = urlMatches && hasKeyFieldLabels();
+    const isGNPR = isGNPRProcess();
+    const shouldShow = urlMatches && isGNPR && hasKeyFieldLabels();
+
     if (location.href === lastUrl && shouldShow === lastShouldShow) return;
     lastUrl = location.href;
     lastShouldShow = shouldShow;
 
-    // 进入 PR 页面才弹；离开就关
+    // 进入 GNPR 页面才弹；离开就关
     if (shouldShow) {
+      console.log("[OA系统小助手] 检测到 GNPR 采购单页面，启动 PR 插件");
       bootForPRPage();
     } else {
       stopObserver();
