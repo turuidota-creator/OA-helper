@@ -3,13 +3,14 @@
 
   const LABELS = {
     deptFullPath: "业务归属部门全路径",
-    projectCode: "费用归属项目Code",
+    projectName: "费用归属项目名称",
     fiscalYear: "费用发生年度",
+    amount: "金额",
     orderPurpose: "订单用途说明",
   };
 
   let observer = null;
-  let lastUrl = location.href;
+  let lastUrl = "";
   let bootTimer = null;
 
   function findFormItemByLabelText(labelText) {
@@ -24,6 +25,14 @@
     if (input && typeof input.value === "string") return input.value.trim();
     const textarea = formItem.querySelector("textarea.el-textarea__inner");
     if (textarea && typeof textarea.value === "string") return textarea.value.trim();
+    const cascaderLabel = formItem.querySelector(".el-cascader__label");
+    if (cascaderLabel && cascaderLabel.textContent) return cascaderLabel.textContent.trim();
+    const selectLabel = formItem.querySelector(".el-select__selected");
+    if (selectLabel && selectLabel.textContent) return selectLabel.textContent.trim();
+    const staticContent = formItem.querySelector(".static-content-item, .static-content");
+    if (staticContent && staticContent.textContent) return staticContent.textContent.trim();
+    const content = formItem.querySelector(".el-form-item__content");
+    if (content && content.textContent) return content.textContent.trim();
     return "";
   }
 
@@ -34,11 +43,55 @@
     return Array.from(new Set(names));
   }
 
+  function parseFiscalYearQuarter(text) {
+    if (!text) return null;
+    const matchYear = text.match(/(20\d{2})/);
+    const matchQuarter = text.match(/Q([1-4])/i) || text.match(/([1-4])\s*季/);
+    if (!matchYear || !matchQuarter) return null;
+    return { year: Number(matchYear[1]), quarter: Number(matchQuarter[1]) };
+  }
+
+  function isFiscalYearOutOfRange(text) {
+    const parsed = parseFiscalYearQuarter(text);
+    if (!parsed) return false;
+    const now = new Date();
+    const currentQuarter = Math.floor(now.getMonth() / 3) + 1;
+    const currentIndex = now.getFullYear() * 4 + currentQuarter;
+    const fiscalIndex = parsed.year * 4 + parsed.quarter;
+    return Math.abs(fiscalIndex - currentIndex) > 1;
+  }
+
+  function readFlowHandlers() {
+    const items = Array.from(document.querySelectorAll("#pane-record .el-timeline-item"));
+    const handlers = [];
+    for (const item of items) {
+      const containers = Array.from(item.querySelectorAll(".el-descriptions-item__container"));
+      let actual = "";
+      let candidate = "";
+      containers.forEach(container => {
+        const label = container.querySelector(".el-descriptions-item__label");
+        const content = container.querySelector(".el-descriptions-item__content");
+        const labelText = label ? label.textContent.trim() : "";
+        const contentText = content ? content.textContent.trim() : "";
+        if (labelText === "实际办理") actual = contentText;
+        if (labelText === "候选办理") candidate = contentText;
+      });
+      const value = (actual && actual !== "-") ? actual : (candidate && candidate !== "-" ? candidate : "");
+      if (value) handlers.push(value);
+      if (handlers.length >= 2) break;
+    }
+    return handlers;
+  }
+
   function extractKeyFields() {
+    const fiscalYear = readInputValueFromFormItem(findFormItemByLabelText(LABELS.fiscalYear));
     return {
       deptFullPath: readInputValueFromFormItem(findFormItemByLabelText(LABELS.deptFullPath)),
-      projectCode: readInputValueFromFormItem(findFormItemByLabelText(LABELS.projectCode)),
-      fiscalYear: readInputValueFromFormItem(findFormItemByLabelText(LABELS.fiscalYear)),
+      projectName: readInputValueFromFormItem(findFormItemByLabelText(LABELS.projectName)),
+      fiscalYear,
+      fiscalYearOutOfRange: isFiscalYearOutOfRange(fiscalYear),
+      amount: readInputValueFromFormItem(findFormItemByLabelText(LABELS.amount)),
+      flowHandlers: readFlowHandlers(),
       attachments: readAttachmentNames(),
       orderPurpose: readInputValueFromFormItem(findFormItemByLabelText(LABELS.orderPurpose)),
     };
@@ -84,12 +137,16 @@
       </div>
 
       <div style="margin:6px 0;"><b>1. 业务归属部门全路径：</b><div style="white-space:pre-wrap;">${safe(data.deptFullPath)}</div></div>
-      <div style="margin:6px 0;"><b>2. 费用归属项目Code：</b><div style="white-space:pre-wrap;">${safe(data.projectCode)}</div></div>
-      <div style="margin:6px 0;"><b>3. 费用发生年度：</b><div style="white-space:pre-wrap;">${safe(data.fiscalYear)}</div></div>
-      <div style="margin:6px 0;"><b>4. 附件名称：</b><div style="white-space:pre-wrap;">${
+      <div style="margin:6px 0;"><b>2. 费用归属项目名称：</b><div style="white-space:pre-wrap;">${safe(data.projectName)}</div></div>
+      <div style="margin:6px 0;"><b>3. 费用发生年度：</b><div style="white-space:pre-wrap;${data.fiscalYearOutOfRange ? "color:#ff6b6b;font-weight:600;" : ""}">${safe(data.fiscalYear)}</div></div>
+      <div style="margin:6px 0;"><b>4. 金额：</b><div style="white-space:pre-wrap;">${safe(data.amount)}</div></div>
+      <div style="margin:6px 0;"><b>5. 流转记录前两个办理人：</b><div style="white-space:pre-wrap;">${
+        data.flowHandlers && data.flowHandlers.length ? data.flowHandlers.join("\n") : "（空）"
+      }</div></div>
+      <div style="margin:6px 0;"><b>6. 附件名称：</b><div style="white-space:pre-wrap;">${
         data.attachments && data.attachments.length ? data.attachments.join("\n") : "（无附件）"
       }</div></div>
-      <div style="margin:6px 0;"><b>5. 订单用途说明：</b><div style="white-space:pre-wrap;">${safe(data.orderPurpose)}</div></div>
+      <div style="margin:6px 0;"><b>7. 订单用途说明：</b><div style="white-space:pre-wrap;">${safe(data.orderPurpose)}</div></div>
     `;
 
     document.body.appendChild(box);
@@ -98,8 +155,10 @@
     box.querySelector("#oa-pr-copy").addEventListener("click", async () => {
       const text =
 `业务归属部门全路径：${data.deptFullPath || ""}
-费用归属项目Code：${data.projectCode || ""}
+费用归属项目名称：${data.projectName || ""}
 费用发生年度：${data.fiscalYear || ""}
+金额：${data.amount || ""}
+流转记录前两个办理人：${(data.flowHandlers || []).join("；")}
 附件名称：${(data.attachments || []).join("；")}
 订单用途说明：${data.orderPurpose || ""}`.trim();
       try {
@@ -115,9 +174,11 @@
   function isDataReady(d) {
     return Boolean(
       (d.deptFullPath && d.deptFullPath.trim()) ||
-      (d.projectCode && d.projectCode.trim()) ||
+      (d.projectName && d.projectName.trim()) ||
       (d.fiscalYear && d.fiscalYear.trim()) ||
+      (d.amount && d.amount.trim()) ||
       (d.orderPurpose && d.orderPurpose.trim()) ||
+      (d.flowHandlers && d.flowHandlers.length) ||
       (d.attachments && d.attachments.length)
     );
   }
