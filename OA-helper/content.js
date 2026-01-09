@@ -221,67 +221,315 @@
   function renderPopup(data) {
     removePopup();
 
-    const box = document.createElement("div");
-    box.id = "oa-pr-key-fields-popup";
-    box.style.cssText = `
+    const root = document.createElement("div");
+    root.id = "oa-pr-key-fields-popup";
+    root.style.cssText = `
       position: fixed;
       right: 16px;
       bottom: 16px;
-      width: 420px;
-      max-height: 60vh;
-      overflow: auto;
-      background: rgba(20,20,20,0.92);
-      color: #fff;
-      border-radius: 12px;
-      padding: 12px 12px 10px;
+      width: 380px;
       z-index: 999999;
-      box-shadow: 0 10px 30px rgba(0,0,0,0.35);
       font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",Arial,sans-serif;
-      font-size: 13px;
-      line-height: 1.4;
     `;
+
+    const shadow = root.attachShadow({ mode: "open" });
 
     const safe = (s) => (s && s.length ? s : "（空）");
+    const isMissing = (s) => !(s && String(s).trim());
 
-    box.innerHTML = `
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-        <div style="font-size:14px;font-weight:600;">PR 关键字段</div>
-        <div style="display:flex;gap:8px;">
-          <button id="oa-pr-copy" style="cursor:pointer;border:0;border-radius:8px;padding:6px 10px;">复制</button>
-          <button id="oa-pr-close" style="cursor:pointer;border:0;border-radius:8px;padding:6px 10px;">关闭</button>
+    const fields = [
+      {
+        title: "1. 业务归属部门全路径",
+        value: data.deptFullPath,
+        missingText: "（空）",
+      },
+      {
+        title: "2. 费用归属项目名称",
+        value: data.projectName,
+        missingText: "（空）",
+      },
+      {
+        title: "3. 金额",
+        value: data.amount,
+        missingText: "（空）",
+      },
+      {
+        title: "4. 费用发生年度",
+        value: data.fiscalYear,
+        missingText: "（空）",
+        extraClass: data.fiscalYearOutOfRange ? "is-warn" : "",
+      },
+      {
+        title: "6. 附件名称",
+        value: data.attachments && data.attachments.length ? data.attachments.join("\n") : "",
+        missingText: "（无附件）",
+      },
+      {
+        title: "7. 订单用途说明",
+        value: data.orderPurpose,
+        missingText: "（空）",
+      },
+      {
+        title: "5. 流转记录前两个办理人",
+        value: data.flowHandlers && data.flowHandlers.length ? data.flowHandlers.join("→") : "",
+        missingText: "（空）",
+      },
+    ];
+
+    const missingCount = fields.reduce((count, field) => (isMissing(field.value) ? count + 1 : count), 0);
+    const fieldHtml = fields
+      .map((field) => {
+        const missing = isMissing(field.value);
+        const valueText = missing ? field.missingText : field.value;
+        const missingClass = missing ? "is-missing" : "is-ok";
+        const extraClass = field.extraClass ? ` ${field.extraClass}` : "";
+        const status = missing ? "⚠️" : "✅";
+        return `
+          <div class="field ${missingClass}${extraClass}">
+            <div class="field-title">${status} ${field.title}</div>
+            <div class="field-value">${safe(valueText)}</div>
+          </div>
+        `;
+      })
+      .join("");
+
+    shadow.innerHTML = `
+      <style>
+        :host {
+          all: initial;
+        }
+        .card {
+          width: 100%;
+          background: #ffffff;
+          color: #1f2329;
+          border-radius: 14px;
+          border: 1px solid #e6e8ee;
+          box-shadow: 0 12px 30px rgba(15, 23, 42, 0.18);
+          overflow: hidden;
+        }
+        .card.is-collapsed .content {
+          display: none;
+        }
+        .header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 10px 12px;
+          background: linear-gradient(135deg, #f5f7ff, #eef2ff);
+          cursor: move;
+        }
+        .title {
+          font-size: 14px;
+          font-weight: 600;
+        }
+        .sub {
+          font-size: 12px;
+          color: #5b6b7a;
+          margin-top: 2px;
+        }
+        .header-text {
+          display: flex;
+          flex-direction: column;
+        }
+        .actions {
+          display: flex;
+          gap: 6px;
+        }
+        button {
+          cursor: pointer;
+          border: 1px solid #d8dce6;
+          background: #ffffff;
+          color: #1f2329;
+          border-radius: 8px;
+          padding: 6px 10px;
+          font-size: 12px;
+        }
+        button.primary {
+          background: #4f46e5;
+          color: #ffffff;
+          border-color: #4f46e5;
+        }
+        .content {
+          padding: 10px 12px 12px;
+          max-height: 60vh;
+          overflow: auto;
+        }
+        .toast {
+          margin-top: 8px;
+          font-size: 12px;
+          color: #d14343;
+          display: none;
+        }
+        .toast.is-visible {
+          display: block;
+        }
+        .field {
+          padding: 8px 10px;
+          border-radius: 10px;
+          background: #f7f8fb;
+          margin-bottom: 8px;
+          border: 1px solid transparent;
+        }
+        .field:last-child {
+          margin-bottom: 0;
+        }
+        .field.is-missing {
+          background: #fff6f6;
+          border-color: #f5b6b6;
+        }
+        .field.is-ok {
+          background: #f6faf7;
+          border-color: #d9f0dd;
+        }
+        .field-title {
+          font-size: 12px;
+          color: #52606d;
+          margin-bottom: 4px;
+        }
+        .field-value {
+          font-size: 13px;
+          color: #1f2329;
+          white-space: pre-wrap;
+        }
+        .field.is-warn .field-value {
+          color: #d14343;
+          font-weight: 600;
+        }
+        .footer {
+          margin-top: 8px;
+          font-size: 12px;
+          color: #5b6b7a;
+        }
+      </style>
+      <div class="card" id="oa-card">
+        <div class="header" id="oa-drag-handle">
+          <div class="header-text">
+            <div class="title">PR 关键字段</div>
+            <div class="sub">${missingCount ? `⚠️ 缺失 ${missingCount} 项` : "✅ 信息完整"}</div>
+          </div>
+          <div class="actions">
+            <button id="oa-pr-pin" title="固定位置">固定</button>
+            <button id="oa-pr-toggle" title="折叠">折叠</button>
+            <button id="oa-pr-copy" class="primary">复制</button>
+            <button id="oa-pr-close">关闭</button>
+          </div>
+        </div>
+        <div class="content" id="oa-content">
+          ${fieldHtml}
+          <div class="toast" id="oa-toast"></div>
+          <div class="footer">拖拽标题栏可移动位置</div>
         </div>
       </div>
-
-      <div style="margin:6px 0;"><b>1. 业务归属部门全路径：</b><div style="white-space:pre-wrap;">${safe(data.deptFullPath)}</div></div>
-      <div style="margin:6px 0;"><b>2. 费用归属项目名称：</b><div style="white-space:pre-wrap;">${safe(data.projectName)}</div></div>
-      <div style="margin:6px 0;"><b>3. 费用发生年度：</b><div style="white-space:pre-wrap;${data.fiscalYearOutOfRange ? "color:#ff6b6b;font-weight:600;" : ""}">${safe(data.fiscalYear)}</div></div>
-      <div style="margin:6px 0;"><b>4. 金额：</b><div style="white-space:pre-wrap;">${safe(data.amount)}</div></div>
-      <div style="margin:6px 0;"><b>5. 流转记录前两个办理人：</b><div style="white-space:pre-wrap;">${data.flowHandlers && data.flowHandlers.length ? data.flowHandlers.join("→") : "（空）"
-      }</div></div>
-      <div style="margin:6px 0;"><b>6. 附件名称：</b><div style="white-space:pre-wrap;">${data.attachments && data.attachments.length ? data.attachments.join("\n") : "（无附件）"
-      }</div></div>
-      <div style="margin:6px 0;"><b>7. 订单用途说明：</b><div style="white-space:pre-wrap;">${safe(data.orderPurpose)}</div></div>
     `;
 
-    document.body.appendChild(box);
+    document.body.appendChild(root);
 
-    box.querySelector("#oa-pr-close").addEventListener("click", () => box.remove());
-    box.querySelector("#oa-pr-copy").addEventListener("click", async () => {
+    const card = shadow.getElementById("oa-card");
+    const toast = shadow.getElementById("oa-toast");
+    const copyBtn = shadow.getElementById("oa-pr-copy");
+    const closeBtn = shadow.getElementById("oa-pr-close");
+    const toggleBtn = shadow.getElementById("oa-pr-toggle");
+    const pinBtn = shadow.getElementById("oa-pr-pin");
+    const dragHandle = shadow.getElementById("oa-drag-handle");
+
+    const state = {
+      isCollapsed: false,
+      isPinned: false,
+      dragging: false,
+      dragOffsetX: 0,
+      dragOffsetY: 0,
+    };
+
+    const stored = localStorage.getItem("oa-pr-popup-position");
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        if (typeof parsed.right === "number" && typeof parsed.bottom === "number") {
+          root.style.right = `${parsed.right}px`;
+          root.style.bottom = `${parsed.bottom}px`;
+          state.isPinned = true;
+          pinBtn.textContent = "已固定";
+        }
+      } catch {
+        localStorage.removeItem("oa-pr-popup-position");
+      }
+    }
+
+    const setToast = (message) => {
+      if (!message) {
+        toast.classList.remove("is-visible");
+        toast.textContent = "";
+        return;
+      }
+      toast.textContent = message;
+      toast.classList.add("is-visible");
+    };
+
+    closeBtn.addEventListener("click", () => root.remove());
+    toggleBtn.addEventListener("click", () => {
+      state.isCollapsed = !state.isCollapsed;
+      card.classList.toggle("is-collapsed", state.isCollapsed);
+      toggleBtn.textContent = state.isCollapsed ? "展开" : "折叠";
+    });
+    pinBtn.addEventListener("click", () => {
+      state.isPinned = !state.isPinned;
+      pinBtn.textContent = state.isPinned ? "已固定" : "固定";
+      if (!state.isPinned) {
+        localStorage.removeItem("oa-pr-popup-position");
+      } else {
+        const right = parseInt(root.style.right || "16", 10);
+        const bottom = parseInt(root.style.bottom || "16", 10);
+        localStorage.setItem("oa-pr-popup-position", JSON.stringify({ right, bottom }));
+      }
+    });
+
+    copyBtn.addEventListener("click", async () => {
       const text =
         `业务归属部门全路径：${data.deptFullPath || ""}
 费用归属项目名称：${data.projectName || ""}
-费用发生年度：${data.fiscalYear || ""}
 金额：${data.amount || ""}
-流转记录前两个办理人：${(data.flowHandlers || []).join("；")}
+费用发生年度：${data.fiscalYear || ""}
 附件名称：${(data.attachments || []).join("；")}
-订单用途说明：${data.orderPurpose || ""}`.trim();
+订单用途说明：${data.orderPurpose || ""}
+流转记录前两个办理人：${(data.flowHandlers || []).join("；")}`.trim();
       try {
         await navigator.clipboard.writeText(text);
-        box.querySelector("#oa-pr-copy").textContent = "已复制";
-        setTimeout(() => (box.querySelector("#oa-pr-copy").textContent = "复制"), 1200);
+        copyBtn.textContent = "已复制";
+        setToast("");
+        setTimeout(() => (copyBtn.textContent = "复制"), 1200);
       } catch {
-        alert("复制失败：浏览器可能禁止剪贴板权限。");
+        setToast("复制失败：浏览器可能禁止剪贴板权限。");
       }
+    });
+
+    const onMouseMove = (event) => {
+      if (!state.dragging) return;
+      const right = Math.max(12, window.innerWidth - event.clientX - state.dragOffsetX);
+      const bottom = Math.max(12, window.innerHeight - event.clientY - state.dragOffsetY);
+      root.style.right = `${right}px`;
+      root.style.bottom = `${bottom}px`;
+    };
+
+    const onMouseUp = () => {
+      if (!state.dragging) return;
+      state.dragging = false;
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
+      if (state.isPinned) {
+        const right = parseInt(root.style.right || "16", 10);
+        const bottom = parseInt(root.style.bottom || "16", 10);
+        localStorage.setItem("oa-pr-popup-position", JSON.stringify({ right, bottom }));
+      }
+    };
+
+    dragHandle.addEventListener("mousedown", (event) => {
+      if (event.target.closest("button")) return;
+      state.dragging = true;
+      const rect = root.getBoundingClientRect();
+      state.dragOffsetX = rect.right - event.clientX;
+      state.dragOffsetY = rect.bottom - event.clientY;
+      document.addEventListener("mousemove", onMouseMove);
+      document.addEventListener("mouseup", onMouseUp);
     });
   }
 
