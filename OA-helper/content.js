@@ -1884,30 +1884,81 @@ PR单号及相关流程：${data.prInfo || ""}
     const urlMatches = PR_URL_RE.test(location.pathname) || PR_URL_RE.test(location.href);
     const processType = getProcessType();
 
+    // 如果不是详情页URL，立即隐藏弹窗
+    if (!urlMatches) {
+      if (lastShouldShow) {
+        console.log("[OA系统小助手] 离开详情页，隐藏弹窗");
+        stopObserver();
+        removePopup();
+        lastUrl = location.href;
+        lastShouldShow = false;
+      }
+      return;
+    }
+
+    // 如果没有检测到流程类型（URL中没有GNPR或DDFK），也隐藏
+    if (!processType) {
+      if (lastShouldShow) {
+        console.log("[OA系统小助手] 未检测到流程类型，隐藏弹窗");
+        stopObserver();
+        removePopup();
+        lastUrl = location.href;
+        lastShouldShow = false;
+      }
+      return;
+    }
+
     // 根据流程类型确定是否显示
     let shouldShow = false;
     if (processType === 'GNPR') {
-      shouldShow = urlMatches && hasKeyFieldLabels();
+      shouldShow = hasKeyFieldLabels();
     } else if (processType === 'DDFK') {
-      shouldShow = urlMatches && hasDDFKKeyFieldLabels();
+      shouldShow = hasDDFKKeyFieldLabels();
     }
 
-    if (location.href === lastUrl && shouldShow === lastShouldShow) return;
-    lastUrl = location.href;
-    lastShouldShow = shouldShow;
+    // 检测URL或显示状态是否变化
+    const urlChanged = location.href !== lastUrl;
+    const showStateChanged = shouldShow !== lastShouldShow;
 
-    // 根据流程类型启动对应的插件
-    if (shouldShow) {
-      if (processType === 'DDFK') {
-        console.log("[OA系统小助手] 检测到 DDFK 付款单页面，启动付款单插件");
-        bootForDDFKPage();
-      } else if (processType === 'GNPR') {
-        console.log("[OA系统小助手] 检测到 GNPR 采购单页面，启动 PR 插件");
-        bootForPRPage();
-      }
-    } else {
+    // 如果URL变化了，强制重新检测
+    if (urlChanged) {
+      console.log("[OA系统小助手] URL变化:", lastUrl, "->", location.href);
+      lastUrl = location.href;
+
+      // 先移除旧弹窗
       stopObserver();
       removePopup();
+
+      if (shouldShow) {
+        lastShouldShow = true;
+        if (processType === 'DDFK') {
+          console.log("[OA系统小助手] 检测到 DDFK 付款单页面，启动付款单插件");
+          bootForDDFKPage();
+        } else if (processType === 'GNPR') {
+          console.log("[OA系统小助手] 检测到 GNPR 采购单页面，启动 PR 插件");
+          bootForPRPage();
+        }
+      } else {
+        lastShouldShow = false;
+      }
+      return;
+    }
+
+    // URL没变但显示状态变了
+    if (showStateChanged) {
+      lastShouldShow = shouldShow;
+      if (shouldShow) {
+        if (processType === 'DDFK') {
+          console.log("[OA系统小助手] 检测到 DDFK 付款单页面，启动付款单插件");
+          bootForDDFKPage();
+        } else if (processType === 'GNPR') {
+          console.log("[OA系统小助手] 检测到 GNPR 采购单页面，启动 PR 插件");
+          bootForPRPage();
+        }
+      } else {
+        stopObserver();
+        removePopup();
+      }
     }
   }
 
