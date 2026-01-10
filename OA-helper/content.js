@@ -500,120 +500,174 @@
 
   // 从关联表格中读取PR选择信息（国内PR采购单表格）
   function readPRSelectionFromTable() {
-    // 查找包含"关联《国内PR(采购单)》"的表格区域
-    const tables = document.querySelectorAll('table');
-    for (const table of tables) {
-      const headers = table.querySelectorAll('th');
-      const headerTexts = Array.from(headers).map(h => (h.textContent || '').trim());
+    const results = [];
 
-      // 检查是否是PR关联表格（包含"PR选择"或"PR单号"列）
-      const prSelectIdx = headerTexts.findIndex(t => t.includes('PR选择'));
-      const prNumberIdx = headerTexts.findIndex(t => t === 'PR单号');
-      const relatedFlowIdx = headerTexts.findIndex(t => t.includes('相关流程'));
+    // 方法1：查找包含"关联《国内PR"文本附近的表格
+    const allTables = document.querySelectorAll('table');
+    for (const table of allTables) {
+      // 检查表格前面是否有"关联《国内PR"标题
+      const prevSibling = table.previousElementSibling;
+      const parentText = table.parentElement?.textContent || '';
+      const tableArea = table.closest('.el-card, .card, .panel, [class*="relation"], [class*="associate"]');
+      const areaText = tableArea?.textContent || '';
 
-      if (prNumberIdx >= 0 || prSelectIdx >= 0) {
-        const rows = table.querySelectorAll('tbody tr');
-        const results = [];
+      if (parentText.includes('国内PR') || areaText.includes('国内PR') ||
+        (prevSibling && prevSibling.textContent?.includes('国内PR'))) {
+        const rows = table.querySelectorAll('tbody tr, tr');
         for (const row of rows) {
           const cells = row.querySelectorAll('td');
-          let prSelect = '';
-          let prNum = '';
-          let relatedFlow = '';
-
-          if (prSelectIdx >= 0 && cells[prSelectIdx]) {
-            prSelect = (cells[prSelectIdx].textContent || '').trim();
+          if (cells.length >= 2) {
+            // 收集该行所有有意义的内容
+            const cellTexts = Array.from(cells)
+              .map(c => (c.textContent || '').trim())
+              .filter(t => t && t.length > 1 && !t.includes('操作') && !t.includes('新增'));
+            if (cellTexts.length > 0) {
+              results.push(cellTexts.join(' | '));
+            }
           }
-          if (prNumberIdx >= 0 && cells[prNumberIdx]) {
-            prNum = (cells[prNumberIdx].textContent || '').trim();
-          }
-          if (relatedFlowIdx >= 0 && cells[relatedFlowIdx]) {
-            relatedFlow = (cells[relatedFlowIdx].textContent || '').trim();
-          }
-
-          // 组合显示：PR单号 + PR选择名称
-          if (prNum || prSelect || relatedFlow) {
-            const parts = [prNum, prSelect, relatedFlow].filter(Boolean);
-            results.push(parts.join('\n'));
-          }
-        }
-        if (results.length > 0) {
-          return results.join('\n---\n');
         }
       }
     }
-    return '';
+
+    // 方法2：直接查找包含GNPR-编号的链接，然后找同行的其他内容
+    if (results.length === 0) {
+      const gnprLinks = document.querySelectorAll('a[href*="GNPR"], a');
+      for (const link of gnprLinks) {
+        const text = (link.textContent || '').trim();
+        if (/GNPR-\d+/.test(text) || text.includes('国内PR申请')) {
+          const row = link.closest('tr');
+          if (row) {
+            const cells = row.querySelectorAll('td');
+            const cellTexts = Array.from(cells)
+              .map(c => (c.textContent || '').trim())
+              .filter(t => t && t.length > 1 && !t.includes('操作'));
+            if (cellTexts.length > 0 && !results.includes(cellTexts.join(' | '))) {
+              results.push(cellTexts.join(' | '));
+            }
+          } else {
+            // 不在表格中，直接读取链接文本
+            if (text && !results.includes(text)) {
+              results.push(text);
+            }
+          }
+        }
+      }
+    }
+
+    return results.join('\n');
   }
 
   // 从关联表格中读取验收单/到货单信息
   function readAcceptanceFromTable() {
-    const tables = document.querySelectorAll('table');
-    for (const table of tables) {
-      const headers = table.querySelectorAll('th');
-      const headerTexts = Array.from(headers).map(h => (h.textContent || '').trim());
+    const results = [];
 
-      // 检查是否是验收单/质量验收单表格
-      const docNumberIdx = headerTexts.findIndex(t => t.includes('验收单号') || t.includes('质量验收单号'));
-      const selectIdx = headerTexts.findIndex(t => t === '选择');
+    // 方法1：查找包含"验收单"或"质量验收"文本附近的表格
+    const allTables = document.querySelectorAll('table');
+    for (const table of allTables) {
+      const parentText = table.parentElement?.textContent || '';
+      const tableArea = table.closest('.el-card, .card, .panel, [class*="relation"], [class*="associate"]');
+      const areaText = tableArea?.textContent || '';
 
-      if (docNumberIdx >= 0 || selectIdx >= 0) {
-        const rows = table.querySelectorAll('tbody tr');
-        const results = [];
+      if (parentText.includes('验收单') || areaText.includes('验收单') ||
+        parentText.includes('质量验收') || areaText.includes('质量验收')) {
+        const rows = table.querySelectorAll('tbody tr, tr');
         for (const row of rows) {
           const cells = row.querySelectorAll('td');
-          let docNumber = '';
-          let selection = '';
-
-          if (docNumberIdx >= 0 && cells[docNumberIdx]) {
-            docNumber = (cells[docNumberIdx].textContent || '').trim();
+          if (cells.length >= 2) {
+            const cellTexts = Array.from(cells)
+              .map(c => (c.textContent || '').trim())
+              .filter(t => t && t.length > 1 && !t.includes('操作') && !t.includes('新增'));
+            if (cellTexts.length > 0) {
+              results.push(cellTexts.join(' | '));
+            }
           }
-          if (selectIdx >= 0 && cells[selectIdx]) {
-            selection = (cells[selectIdx].textContent || '').trim();
-          }
-
-          // 组合显示：验收单号 + 选择内容
-          if (docNumber || selection) {
-            const parts = [docNumber, selection].filter(Boolean);
-            results.push(parts.join('\n'));
-          }
-        }
-        if (results.length > 0) {
-          return results.join('\n---\n');
         }
       }
     }
-    return '';
+
+    // 方法2：直接查找包含ZLYSD-编号的链接或包含"到货"的链接
+    if (results.length === 0) {
+      const links = document.querySelectorAll('a');
+      for (const link of links) {
+        const text = (link.textContent || '').trim();
+        if (/ZLYSD-\d+/.test(text) || text.includes('到货') || text.includes('验收')) {
+          const row = link.closest('tr');
+          if (row) {
+            const cells = row.querySelectorAll('td');
+            const cellTexts = Array.from(cells)
+              .map(c => (c.textContent || '').trim())
+              .filter(t => t && t.length > 1 && !t.includes('操作'));
+            if (cellTexts.length > 0 && !results.includes(cellTexts.join(' | '))) {
+              results.push(cellTexts.join(' | '));
+            }
+          } else {
+            if (text && !results.includes(text)) {
+              results.push(text);
+            }
+          }
+        }
+      }
+    }
+
+    return results.join('\n');
   }
 
   // 读取相关附件
   function readDDFKAttachments() {
-    // 方法1：从"相关附件"标签页读取
-    const attachmentPane = document.querySelector('#pane-attachment, [id*="attachment"]');
-    if (attachmentPane) {
-      const fileNames = Array.from(attachmentPane.querySelectorAll('a, .file-name, .upload-file-name'))
-        .map(el => (el.textContent || '').trim())
-        .filter(Boolean);
-      if (fileNames.length > 0) {
-        return Array.from(new Set(fileNames));
+    const fileNames = [];
+
+    // 方法1：查找"相关附件"标签页或区域
+    // 从截图看，附件在一个表格中，有"文件名"列
+    const allTables = document.querySelectorAll('table');
+    for (const table of allTables) {
+      const headers = table.querySelectorAll('th');
+      const headerTexts = Array.from(headers).map(h => (h.textContent || '').trim());
+
+      // 查找包含"文件名"列的表格
+      const fileNameIdx = headerTexts.findIndex(t => t === '文件名' || t.includes('文件'));
+      if (fileNameIdx >= 0) {
+        const rows = table.querySelectorAll('tbody tr, tr:not(:first-child)');
+        for (const row of rows) {
+          const cells = row.querySelectorAll('td');
+          if (cells[fileNameIdx]) {
+            // 获取文件名（可能是链接）
+            const cell = cells[fileNameIdx];
+            const link = cell.querySelector('a');
+            const name = link ? (link.textContent || '').trim() : (cell.textContent || '').trim();
+            if (name && name.includes('.') && !fileNames.includes(name)) {
+              fileNames.push(name);
+            }
+          }
+        }
       }
     }
 
-    // 方法2：从附件列表读取
-    const attachmentList = document.querySelector('.attachment-list, [class*="attachment"]');
-    if (attachmentList) {
-      const fileNames = Array.from(attachmentList.querySelectorAll('a, span'))
-        .map(el => (el.textContent || '').trim())
-        .filter(name => name && name.includes('.'));
-      if (fileNames.length > 0) {
-        return Array.from(new Set(fileNames));
+    // 方法2：查找所有包含文件扩展名的链接
+    if (fileNames.length === 0) {
+      const links = document.querySelectorAll('a');
+      for (const link of links) {
+        const text = (link.textContent || '').trim();
+        // 匹配常见文件扩展名
+        if (/\.(pdf|doc|docx|xls|xlsx|ppt|pptx|jpg|jpeg|png|gif|zip|rar|ofd|txt|csv)$/i.test(text)) {
+          if (!fileNames.includes(text)) {
+            fileNames.push(text);
+          }
+        }
       }
     }
 
-    // 方法3：查找所有 .pdf, .doc 等文件链接
-    const allLinks = Array.from(document.querySelectorAll('a'))
-      .map(a => (a.textContent || '').trim())
-      .filter(text => /\.(pdf|doc|docx|xls|xlsx|jpg|png|zip|rar)$/i.test(text));
+    // 方法3：查找 upload-file-name 类
+    if (fileNames.length === 0) {
+      const uploadNames = document.querySelectorAll('.upload-file-name, [class*="file-name"]');
+      for (const el of uploadNames) {
+        const name = (el.textContent || '').trim();
+        if (name && !fileNames.includes(name)) {
+          fileNames.push(name);
+        }
+      }
+    }
 
-    return Array.from(new Set(allLinks));
+    return fileNames;
   }
 
   // 提取付款单关键字段
