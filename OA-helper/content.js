@@ -498,8 +498,134 @@
 
   // ==================== 付款单（DDFK）专用函数 ====================
 
+  // 从关联表格中读取PR选择信息（国内PR采购单表格）
+  function readPRSelectionFromTable() {
+    // 查找包含"关联《国内PR(采购单)》"的表格区域
+    const tables = document.querySelectorAll('table');
+    for (const table of tables) {
+      const headers = table.querySelectorAll('th');
+      const headerTexts = Array.from(headers).map(h => (h.textContent || '').trim());
+
+      // 检查是否是PR关联表格（包含"PR选择"或"PR单号"列）
+      const prSelectIdx = headerTexts.findIndex(t => t.includes('PR选择'));
+      const prNumberIdx = headerTexts.findIndex(t => t === 'PR单号');
+      const relatedFlowIdx = headerTexts.findIndex(t => t.includes('相关流程'));
+
+      if (prNumberIdx >= 0 || prSelectIdx >= 0) {
+        const rows = table.querySelectorAll('tbody tr');
+        const results = [];
+        for (const row of rows) {
+          const cells = row.querySelectorAll('td');
+          let prSelect = '';
+          let prNum = '';
+          let relatedFlow = '';
+
+          if (prSelectIdx >= 0 && cells[prSelectIdx]) {
+            prSelect = (cells[prSelectIdx].textContent || '').trim();
+          }
+          if (prNumberIdx >= 0 && cells[prNumberIdx]) {
+            prNum = (cells[prNumberIdx].textContent || '').trim();
+          }
+          if (relatedFlowIdx >= 0 && cells[relatedFlowIdx]) {
+            relatedFlow = (cells[relatedFlowIdx].textContent || '').trim();
+          }
+
+          // 组合显示：PR单号 + PR选择名称
+          if (prNum || prSelect || relatedFlow) {
+            const parts = [prNum, prSelect, relatedFlow].filter(Boolean);
+            results.push(parts.join('\n'));
+          }
+        }
+        if (results.length > 0) {
+          return results.join('\n---\n');
+        }
+      }
+    }
+    return '';
+  }
+
+  // 从关联表格中读取验收单/到货单信息
+  function readAcceptanceFromTable() {
+    const tables = document.querySelectorAll('table');
+    for (const table of tables) {
+      const headers = table.querySelectorAll('th');
+      const headerTexts = Array.from(headers).map(h => (h.textContent || '').trim());
+
+      // 检查是否是验收单/质量验收单表格
+      const docNumberIdx = headerTexts.findIndex(t => t.includes('验收单号') || t.includes('质量验收单号'));
+      const selectIdx = headerTexts.findIndex(t => t === '选择');
+
+      if (docNumberIdx >= 0 || selectIdx >= 0) {
+        const rows = table.querySelectorAll('tbody tr');
+        const results = [];
+        for (const row of rows) {
+          const cells = row.querySelectorAll('td');
+          let docNumber = '';
+          let selection = '';
+
+          if (docNumberIdx >= 0 && cells[docNumberIdx]) {
+            docNumber = (cells[docNumberIdx].textContent || '').trim();
+          }
+          if (selectIdx >= 0 && cells[selectIdx]) {
+            selection = (cells[selectIdx].textContent || '').trim();
+          }
+
+          // 组合显示：验收单号 + 选择内容
+          if (docNumber || selection) {
+            const parts = [docNumber, selection].filter(Boolean);
+            results.push(parts.join('\n'));
+          }
+        }
+        if (results.length > 0) {
+          return results.join('\n---\n');
+        }
+      }
+    }
+    return '';
+  }
+
+  // 读取相关附件
+  function readDDFKAttachments() {
+    // 方法1：从"相关附件"标签页读取
+    const attachmentPane = document.querySelector('#pane-attachment, [id*="attachment"]');
+    if (attachmentPane) {
+      const fileNames = Array.from(attachmentPane.querySelectorAll('a, .file-name, .upload-file-name'))
+        .map(el => (el.textContent || '').trim())
+        .filter(Boolean);
+      if (fileNames.length > 0) {
+        return Array.from(new Set(fileNames));
+      }
+    }
+
+    // 方法2：从附件列表读取
+    const attachmentList = document.querySelector('.attachment-list, [class*="attachment"]');
+    if (attachmentList) {
+      const fileNames = Array.from(attachmentList.querySelectorAll('a, span'))
+        .map(el => (el.textContent || '').trim())
+        .filter(name => name && name.includes('.'));
+      if (fileNames.length > 0) {
+        return Array.from(new Set(fileNames));
+      }
+    }
+
+    // 方法3：查找所有 .pdf, .doc 等文件链接
+    const allLinks = Array.from(document.querySelectorAll('a'))
+      .map(a => (a.textContent || '').trim())
+      .filter(text => /\.(pdf|doc|docx|xls|xlsx|jpg|png|zip|rar)$/i.test(text));
+
+    return Array.from(new Set(allLinks));
+  }
+
   // 提取付款单关键字段
   function extractDDFKFields() {
+    // 先尝试从表格读取PR和验收单信息
+    const prFromTable = readPRSelectionFromTable();
+    const acceptanceFromTable = readAcceptanceFromTable();
+
+    // 如果表格没有数据，回退到表单字段读取
+    const prFromForm = readInputValueFromFormItem(findFormItemByLabels(DDFK_LABELS.prNumber));
+    const acceptanceFromForm = readInputValueFromFormItem(findFormItemByLabels(DDFK_LABELS.acceptanceDoc));
+
     return {
       applicantName: readApplicantName(),
       deptName: readInputValueFromFormItem(findFormItemByLabels(DDFK_LABELS.deptName)),
@@ -507,11 +633,9 @@
       supplierName: readInputValueFromFormItem(findFormItemByLabels(DDFK_LABELS.supplierName)),
       bankAccount: readInputValueFromFormItem(findFormItemByLabels(DDFK_LABELS.bankAccount)),
       amount: formatAmountForDisplay(readInputValueFromFormItem(findFormItemByLabels(DDFK_LABELS.amount))),
-      prNumber: readInputValueFromFormItem(findFormItemByLabels(DDFK_LABELS.prNumber)),
-      acceptanceDoc: readInputValueFromFormItem(findFormItemByLabels(DDFK_LABELS.acceptanceDoc)),
-      // 读取当前勾选状态用于显示
-      isDeposit: readInputValueFromFormItem(findFormItemByLabels(DDFK_LABELS.isDeposit)),
-      isCrossBorder: readInputValueFromFormItem(findFormItemByLabels(DDFK_LABELS.isCrossBorder)),
+      prInfo: prFromTable || prFromForm,
+      acceptanceInfo: acceptanceFromTable || acceptanceFromForm,
+      attachments: readDDFKAttachments(),
     };
   }
 
@@ -570,7 +694,7 @@
       (d.projectName && d.projectName.trim()) ||
       (d.supplierName && d.supplierName.trim()) ||
       (d.amount && d.amount.trim()) ||
-      (d.prNumber && d.prNumber.trim())
+      (d.prInfo && d.prInfo.trim())
     );
   }
 
@@ -581,8 +705,9 @@
       !d.supplierName?.trim() &&
       !d.bankAccount?.trim() &&
       !d.amount?.trim() &&
-      !d.prNumber?.trim() &&
-      !d.acceptanceDoc?.trim();
+      !d.prInfo?.trim() &&
+      !d.acceptanceInfo?.trim() &&
+      (!d.attachments || d.attachments.length === 0);
   }
 
   function removePopup() {
@@ -1136,23 +1261,22 @@
       },
       {
         title: "6. PR单号及相关流程",
-        value: data.prNumber,
+        value: data.prInfo,
         missingText: "（空）",
       },
       {
         title: "7. 验收单",
-        value: data.acceptanceDoc,
+        value: data.acceptanceInfo,
         missingText: "（空）",
+      },
+      {
+        title: "8. 附件",
+        value: data.attachments && data.attachments.length ? data.attachments.join("\n") : "",
+        missingText: "（无附件）",
       },
     ];
 
     const missingCount = fields.reduce((count, field) => (isMissing(field.value) ? count + 1 : count), 0);
-
-    // 检查自动勾选状态
-    const depositStatus = data.isDeposit || "";
-    const crossBorderStatus = data.isCrossBorder || "";
-    const hasDepositSelection = depositStatus.includes("非保证金") || depositStatus.includes("保证金");
-    const hasCrossBorderSelection = crossBorderStatus.includes("否") || crossBorderStatus.includes("是");
 
     let statusText = "";
     let statusClass = "";
@@ -1179,18 +1303,6 @@
         `;
       })
       .join("");
-
-    // 添加自动勾选状态显示
-    const autoSelectHtml = `
-      <div class="auto-select-section">
-        <div class="auto-select-item ${depositStatus.includes("非保证金") ? "is-ok" : "is-warn"}">
-          是否为保证金：${depositStatus || "待选择"} ${depositStatus.includes("非保证金") ? "✅" : "⚠️"}
-        </div>
-        <div class="auto-select-item ${crossBorderStatus.includes("否") ? "is-ok" : "is-warn"}">
-          是否为跨境支付：${crossBorderStatus || "待选择"} ${crossBorderStatus.includes("否") ? "✅" : "⚠️"}
-        </div>
-      </div>
-    `;
 
     shadow.innerHTML = `
       <style>
@@ -1319,27 +1431,6 @@
           white-space: pre-wrap;
           word-break: break-all;
         }
-        .auto-select-section {
-          margin-top: 10px;
-          padding: 8px 10px;
-          background: #f0f9ff;
-          border-radius: 8px;
-          border: 1px solid #bae6fd;
-        }
-        .auto-select-item {
-          font-size: 12px;
-          color: #0369a1;
-          margin-bottom: 4px;
-        }
-        .auto-select-item:last-child {
-          margin-bottom: 0;
-        }
-        .auto-select-item.is-ok {
-          color: #15803d;
-        }
-        .auto-select-item.is-warn {
-          color: #b45309;
-        }
         .footer {
           margin-top: 8px;
           font-size: 12px;
@@ -1349,7 +1440,7 @@
       <div class="card" id="oa-card">
         <div class="header" id="oa-drag-handle">
           <div class="header-text">
-            <div class="title">💰 付款单 关键字段${data.applicantName ? ` <span class="applicant-link" id="oa-copy-name" title="点击复制姓名并打开企业微信">${data.applicantName}</span>` : ""}</div>
+            <div class="title">💰付款单${data.applicantName ? ` <span class="applicant-link" id="oa-copy-name" title="点击复制姓名并打开企业微信">${data.applicantName}</span>` : ""}</div>
             <div class="sub ${statusClass}">${statusText}</div>
           </div>
           <div class="actions">
@@ -1361,7 +1452,6 @@
         </div>
         <div class="content" id="oa-content">
           ${fieldHtml}
-          ${autoSelectHtml}
           <div class="toast" id="oa-toast"></div>
           <div class="footer">拖拽标题栏可移动位置</div>
         </div>
@@ -1486,8 +1576,9 @@
 供应商名称：${data.supplierName || ""}
 银行账号：${data.bankAccount || ""}
 付款金额：${data.amount || ""}
-PR单号及相关流程：${data.prNumber || ""}
-验收单：${data.acceptanceDoc || ""}`.trim();
+PR单号及相关流程：${data.prInfo || ""}
+验收单：${data.acceptanceInfo || ""}
+附件：${(data.attachments || []).join("；")}`.trim();
       try {
         await navigator.clipboard.writeText(text);
         copyBtn.textContent = "已复制";
@@ -1563,10 +1654,9 @@ PR单号及相关流程：${data.prNumber || ""}
         supplierName: data.supplierName || "",
         bankAccount: data.bankAccount || "",
         amount: data.amount || "",
-        prNumber: data.prNumber || "",
-        acceptanceDoc: data.acceptanceDoc || "",
-        isDeposit: data.isDeposit || "",
-        isCrossBorder: data.isCrossBorder || "",
+        prInfo: data.prInfo || "",
+        acceptanceInfo: data.acceptanceInfo || "",
+        attachmentsCount: (data.attachments || []).length,
       });
     };
 
